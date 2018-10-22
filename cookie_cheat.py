@@ -77,6 +77,9 @@ def main():
     # link to get csv export from contest id
     # https://www.draftkings.com/contest/exportfullstandingscsv/62252398
 
+
+    # $50 week 7 contest id 61950009
+
     # my_list = pull_csv(fn, CSV_URL)
     # for row in my_list:
     #     print(row)

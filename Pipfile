@@ -6,6 +6,9 @@ name = "pypi"
 [packages]
 pycookiecheat = "*"
 requests = "*"
+pycrypto = "*"
+browsercookie = "*"
+"pywin32" = "*"
 
 [dev-packages]
 
