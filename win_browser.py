@@ -4,6 +4,9 @@ from os import path
 import requests
 import zipfile
 
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+
 import browsercookie
 
 
@@ -77,10 +80,11 @@ def pull_contest_zip(filename, contest_id):
 
 
 def main():
-    contest_id = 61945587
+    contest_id = 62468079
     CSV_URL = 'https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId=21&draftGroupId=22168'
 
-    fn = 'DKSalaries_week7_full.csv'
+    # fn = 'DKSalaries_week7_full.csv'
+    fn = 'DKSalaries_Monday_basketball.csv'
 
     with open(fn, mode='r') as f:
         cr = csv.reader(f, delimiter=',')
@@ -90,6 +94,9 @@ def main():
 
     # link to get csv export from contest id
     # https://www.draftkings.com/contest/exportfullstandingscsv/62252398
+
+    # client id  837292985707-anvf2dcn7ng1ts9jq1b452qa4rfs5k25.apps.googleusercontent.com
+    # secret 4_ifPYAtKg0DTuJ2PJDfsDda
 
 
     # $50 week 7 contest id 61950009

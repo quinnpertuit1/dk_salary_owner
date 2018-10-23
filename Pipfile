@@ -9,6 +9,9 @@ requests = "*"
 pycrypto = "*"
 browsercookie = "*"
 "pywin32" = "*"
+google-api-python-client = "*"
+"oauth2client" = "*"
+gspread = "*"
 
 [dev-packages]
 
