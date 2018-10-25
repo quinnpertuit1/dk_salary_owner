@@ -23,7 +23,8 @@ def pull_csv(filename, csv_url):
 
 
 def pull_contest_zip(filename, contest_id):
-    contest_csv_url = 'https://www.draftkings.com/contest/exportfullstandingscsv/{0}'.format(contest_id)
+    contest_csv_url = 'https://www.draftkings.com/contest/exportfullstandingscsv/{0}'.format(
+        contest_id)
 
     # ~/Library/Application Support/Google/Chrome/Default/Cookies
 
@@ -80,11 +81,11 @@ def pull_contest_zip(filename, contest_id):
 
 
 def main():
-    contest_id = 62468079
+    contest_id = 62600001
     CSV_URL = 'https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId=21&draftGroupId=22168'
 
     # fn = 'DKSalaries_week7_full.csv'
-    fn = 'DKSalaries_Monday_basketball.csv'
+    fn = 'DKSalaries_Tuesday_basketball.csv'
 
     with open(fn, mode='r') as f:
         cr = csv.reader(f, delimiter=',')
@@ -97,7 +98,6 @@ def main():
 
     # client id  837292985707-anvf2dcn7ng1ts9jq1b452qa4rfs5k25.apps.googleusercontent.com
     # secret 4_ifPYAtKg0DTuJ2PJDfsDda
-
 
     # $50 week 7 contest id 61950009
 

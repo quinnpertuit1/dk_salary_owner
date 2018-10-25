@@ -1,7 +1,7 @@
 import browsercookie
 import csv
 import io
-from os import path
+from os import path, sep
 import requests
 # from unidecode import unidecode
 import unicodedata
@@ -106,7 +106,7 @@ def add_header_format(service, spreadsheet_id):
         'startRowIndex': 0,
         'endRowIndex': 1,
         'startColumnIndex': 0,  # A
-        'endColumnIndex': 6,  # G
+        'endColumnIndex': 7,  # F
     }
     requests = [{
         "repeatCell": {
@@ -153,22 +153,22 @@ def add_column_number_format(service, spreadsheet_id):
         'sheetId': 0,
         'startRowIndex': 1,
         'endRowIndex': 1000,
-        'startColumnIndex': 3,  # E
-        'endColumnIndex': 4
+        'startColumnIndex': 4,  # E
+        'endColumnIndex': 5
     }
     range_points = {
         'sheetId': 0,
         'startRowIndex': 1,
         'endRowIndex': 1000,
-        'startColumnIndex': 4,  # E
-        'endColumnIndex': 5
+        'startColumnIndex': 5,  # E
+        'endColumnIndex': 6
     }
     range_value = {
         'sheetId': 0,
         'startRowIndex': 1,
         'endRowIndex': 1000,
-        'startColumnIndex': 5,  # F
-        'endColumnIndex': 6
+        'startColumnIndex': 6,  # F
+        'endColumnIndex': 7
     }
     requests = [{
         'repeatCell': {
@@ -190,7 +190,7 @@ def add_column_number_format(service, spreadsheet_id):
                 'userEnteredFormat': {
                     'numberFormat': {
                         'type': 'NUMBER',
-                        'pattern': '##0.0'
+                        'pattern': '##0.00'
                     }
                 }
             },
@@ -219,22 +219,22 @@ def add_cond_format_rules(service, spreadsheet_id):
         'sheetId': 0,
         'startRowIndex': 1,
         'endRowIndex': 1001,
-        'startColumnIndex': '3',  # D
-        'endColumnIndex': '4',
+        'startColumnIndex': '4',  # E
+        'endColumnIndex': '5',
     }
     range_points = {
         'sheetId': 0,
         'startRowIndex': 1,
         'endRowIndex': 1001,
-        'startColumnIndex': '4',  # E
-        'endColumnIndex': '5',
+        'startColumnIndex': '5',  # F
+        'endColumnIndex': '6',
     }
     value_range = {
         'sheetId': 0,
         'startRowIndex': 1,
         'endRowIndex': 1001,
-        'startColumnIndex': '5',  # F
-        'endColumnIndex': '6',
+        'startColumnIndex': '6',  # G
+        'endColumnIndex': '7',
     }
     # white --> yellow
     rule_white_yellow = {
@@ -346,7 +346,6 @@ def append_row(service, spreadsheet_id, range_name, values):
 
 def write_row(service, spreadsheet_id, range_name, values):
     """Write a set of values to a spreadsheet."""
-
     body = {
         'values': values
     }
@@ -358,18 +357,30 @@ def write_row(service, spreadsheet_id, range_name, values):
 
 
 def main():
-
-    contest_id = 62468079
+    # 62600001 Tuesday night $25 DU
+    contest_id = 62600001
+    #
     CSV_URL = 'https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId=21&draftGroupId=22168'
 
     # fn = 'DKSalaries_week7_full.csv'
-    fn = 'DKSalaries_Monday_basketball.csv'
+    # fn = 'DKSalaries_Tuesday_basketball.csv'
+    dir = path.join('c:', sep, 'users', 'adam', 'documents', 'git', 'dk_salary_owner')
+    fn = 'DKSalaries_Tuesday_basketball.csv'
 
-    with open(fn, mode='r') as f:
+    with open(path.join(dir, fn), mode='r') as f:
         cr = csv.reader(f, delimiter=',')
         slate_list = list(cr)
 
-    salary_dict = {row[2]: row[5] for row in slate_list}
+    salary_dict = {}
+    # salary_dict = {row[2]: row[5] for row in slate_list}
+    for row in slate_list[1:]:
+        name = row[2]
+        if name not in salary_dict:
+            salary_dict[name] = {}
+            salary_dict[name]['salary'] = 0
+            salary_dict[name]['team_abbv'] = ''
+        salary_dict[name]['salary'] = row[5]
+        salary_dict[name]['team_abbv'] = row[7]
 
     # link to get csv export from contest id
     # https://www.draftkings.com/contest/exportfullstandingscsv/62252398
@@ -387,15 +398,16 @@ def main():
 
     # contest_list = pull_contest_zip(fn2, contest_id)
     # fn2 = "contest-standings-61950009_finished.csv"
-    if path.exists(fn2):
-        print("{0} exists".format(fn2))
-        with open(fn2, mode='r') as f:
-            # lines = io.TextIOWrapper(f, newline='\r\n')
-            # print(lines)
-            cr = csv.reader(f, delimiter=',')
-            contest_list = list(cr)
-    else:
-        contest_list = pull_contest_zip(fn2, contest_id)
+    # if path.exists(fn2):
+    #     print("{0} exists".format(fn2))
+    #     with open(fn2, mode='r') as f:
+    #         # lines = io.TextIOWrapper(f, newline='\r\n')
+    #         # print(lines)
+    #         cr = csv.reader(f, delimiter=',')
+    #         contest_list = list(cr)
+    # else:
+    #     contest_list = pull_contest_zip(fn2, contest_id)
+    contest_list = pull_contest_zip(fn2, contest_id)
 
     # values
     # values = [
@@ -409,7 +421,7 @@ def main():
     # ]
 
     values_to_insert = []
-    with open('output.csv', mode='w', newline='') as out:
+    with open(path.join(dir, 'output.csv'), mode='w', newline='') as out:
         wrtr = csv.writer(out, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         for i, row in enumerate(contest_list[1:]):
             stats = row[7:]
@@ -421,10 +433,14 @@ def main():
                 # wtf is going on with this guy's name?
                 if 'Exum' in name:
                     name = 'Dante Exum'
+                if 'Guillermo' in name:
+                    name = 'Guillermo Hernangomez'
                 # name = strip_accents(name)
                 # print(name)
                 pos = stats[1]
-                salary = int(salary_dict[name])
+                salary = int(salary_dict[name]['salary'])
+                # print(salary_dict[name]['team_abbv'])
+                team_abbv = salary_dict[name]['team_abbv']
                 perc = float(stats[2].replace('%', '')) / 100
                 pts = float(stats[3])
 
@@ -434,21 +450,21 @@ def main():
                 else:
                     value = 0
                 # print([name, pos, salary, perc, pts, value])
-                values_to_insert.append([name, pos, salary, perc, pts, value])
-                wrtr.writerow([name, pos, salary, perc, pts, value])
+                values_to_insert.append([name, team_abbv, pos, salary, perc, pts, value])
+                wrtr.writerow([name, team_abbv, pos, salary, perc, pts, value])
 
     # google sheets API boilerplate
     SCOPES = 'https://www.googleapis.com/auth/spreadsheets'
-    store = file.Storage('token.json')
+    store = file.Storage(path.join(dir, 'token.json'))
     creds = store.get()
     if not creds or creds.invalid:
-        flow = client.flow_from_clientsecrets('credentials.json', SCOPES)
+        flow = client.flow_from_clientsecrets(path.join(dir, 'token.json'), SCOPES)
         creds = tools.run_flow(flow, store)
     service = build('sheets', 'v4', http=creds.authorize(Http()))
 
     # Call the Sheets API
     SPREADSHEET_ID = '1Jv5nT-yUoEarkzY5wa7RW0_y0Dqoj8_zDrjeDs-pHL4'
-    RANGE_NAME = 'Sheet1!A2:F'
+    RANGE_NAME = 'Sheet1!A2:G'
 
     print('Starting write_row')
     write_row(service, SPREADSHEET_ID, RANGE_NAME, values_to_insert)

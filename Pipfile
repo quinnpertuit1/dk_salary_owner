@@ -12,6 +12,7 @@ browsercookie = "*"
 google-api-python-client = "*"
 "oauth2client" = "*"
 gspread = "*"
+"autopep8" = "*"
 
 [dev-packages]
 
