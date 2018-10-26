@@ -1,11 +1,13 @@
+"""Use contest ID to update Google Sheet with DFS results."""
 import browsercookie
 import csv
 import io
 from os import path, sep
 import requests
 # from unidecode import unidecode
-import unicodedata
+# import unicodedata
 import zipfile
+from datetime import datetime
 
 from googleapiclient.discovery import build
 from httplib2 import Http
@@ -32,7 +34,8 @@ from oauth2client import file, client, tools
 #                    if unicodedata.category(c) != 'Mn')
 
 
-def pull_csv(filename, csv_url):
+def pull_salary_csv(filename, csv_url):
+    """Pull CSV for salary information."""
     with requests.Session() as s:
         download = s.get(csv_url)
 
@@ -45,7 +48,8 @@ def pull_csv(filename, csv_url):
 
 
 def pull_contest_zip(filename, contest_id):
-    contest_csv_url = 'https://www.draftkings.com/contest/exportfullstandingscsv/{0}'.format(
+    """Pull contest file (so far can be .zip or .csv file)."""
+    contest_csv_url = "https://www.draftkings.com/contest/exportfullstandingscsv/{0}".format(
         contest_id)
 
     # ~/Library/Application Support/Google/Chrome/Default/Cookies
@@ -57,91 +61,69 @@ def pull_contest_zip(filename, contest_id):
     # retrieve exported contest csv
     r = requests.get(contest_csv_url, cookies=cookies)
 
-    # request will be a zip file
-    z = zipfile.ZipFile(io.BytesIO(r.content))
+    print(r.headers)
+    # if headers say file is a CSV file
+    if r.headers['Content-Type'] == 'text/csv':
+        # decode bytes into string
+        csvfile = r.content.decode('utf-8')
+        # open reader object on csvfile
+        rdr = csv.reader(csvfile.splitlines(), delimiter=',')
+        # return list
+        return list(rdr)
+    else:
+        # request will be a zip file
+        z = zipfile.ZipFile(io.BytesIO(r.content))
 
-    for name in z.namelist():
-        # csvfile = z.read(name)
-        z.extract(name)
-        with z.open(name) as csvfile:
-            print("name within zipfile".format(name))
-
-            lines = io.TextIOWrapper(csvfile, newline='\r\n')
-            cr = csv.reader(lines, delimiter=',')
-            my_list = list(cr)
-            return my_list
-
-
-# def pull_data(filename, ENDPOINT):
-#     """Either pull file from API or from file."""
-#     data = None
-#     if not path.isfile(filename):
-#         print("{} does not exist. Pulling from endpoint [{}]".format(filename, ENDPOINT))
-#         # send GET request
-#         r = requests.get(ENDPOINT)
-#         status = r.status_code
-#
-#         # if not successful, raise an exception
-#         if status != 200:
-#             raise Exception('Requests status != 200. It is: {0}'.format(status))
-#
-#         # store response
-#         data = r.json()
-#
-#         # dump json to file for future use to avoid multiple API pulls
-#         with open(filename, 'w') as outfile:
-#             json.dump(data, outfile)
-#     else:
-#         print("File exists [{}]. Nice!".format(filename))
-#         # load json from file
-#         with open(filename, 'r') as json_file:
-#             data = json.load(json_file)
-#
-#     return data
+        for name in z.namelist():
+            # extract file - it seems easier this way
+            z.extract(name)
+            with z.open(name) as csvfile:
+                print("name within zipfile".format(name))
+                # convert to TextIOWrapper object
+                lines = io.TextIOWrapper(csvfile, newline='\r\n')
+                # open reader object on csvfile within zip file
+                rdr = csv.reader(lines, delimiter=',')
+                return list(rdr)
 
 
 def add_header_format(service, spreadsheet_id):
+    """Format header (row 0) with white text on black blackground."""
+    sheet_id = 0
     header_range = {
-        'sheetId': 0,
+        'sheetId': sheet_id,
         'startRowIndex': 0,
         'endRowIndex': 1,
         'startColumnIndex': 0,  # A
         'endColumnIndex': 7,  # F
     }
+    color_white = {'red': 0.0, 'green': 0.0, 'blue': 0.0}
+    color_black = {'red': 1.0, 'green': 1.0, 'blue': 1.0}
     requests = [{
-        "repeatCell": {
-            "range": header_range,
-            "cell": {
-                "userEnteredFormat": {
-                    "backgroundColor": {
-                        "red": 0.0,
-                        "green": 0.0,
-                        "blue": 0.0
-                    },
+        'repeatCell': {
+            'range': header_range,
+            'cell': {
+                'userEnteredFormat': {
+                    'backgroundColor': color_white,
                     'horizontalAlignment': 'CENTER',
                     'textFormat': {
-                        "foregroundColor": {
-                            "red": 1.0,
-                            "green": 1.0,
-                            "blue": 1.0
-                        },
+                        'foregroundColor': color_black,
                         'fontFamily': 'Trebuchet MS',
-                        "fontSize": 10,
-                        "bold": True
+                        'fontSize': 10,
+                        'bold': True
                     }
                 }
             },
             'fields': "userEnteredFormat(backgroundColor, textFormat, horizontalAlignment)"
         }
     }, {
-        "updateSheetProperties": {
-            "properties": {
-                "sheetId": 0,
-                "gridProperties": {
-                    "frozenRowCount": 1
+        'updateSheetProperties': {
+            'properties': {
+                'sheetId': sheet_id,
+                'gridProperties': {
+                    'frozenRowCount': 1
                 }
             },
-            "fields": "gridProperties.frozenRowCount"
+            'fields': 'gridProperties.frozenRowCount'
         }
     }]
     print('Applying header to sheet')
@@ -149,6 +131,7 @@ def add_header_format(service, spreadsheet_id):
 
 
 def add_column_number_format(service, spreadsheet_id):
+    """Format each specified column with explicit number format."""
     range_ownership = {
         'sheetId': 0,
         'startRowIndex': 1,
@@ -215,6 +198,7 @@ def add_column_number_format(service, spreadsheet_id):
 
 
 def add_cond_format_rules(service, spreadsheet_id):
+    """Add conditional formatting rules to ownership, points, and value fields."""
     range_ownership = {
         'sheetId': 0,
         'startRowIndex': 1,
@@ -321,7 +305,24 @@ def add_cond_format_rules(service, spreadsheet_id):
     batch_update_sheet(service, spreadsheet_id, requests)
 
 
+def add_last_updated(service, spreadsheet_id):
+    """Add (or update) the time in the header."""
+    range = 'Sheet1!H1:I1'
+    values = [
+        ['Last Updated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
+    ]
+    body = {
+        'values': values
+    }
+    value_input_option = 'USER_ENTERED'
+    result = service.spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id, range=range,
+        valueInputOption=value_input_option, body=body).execute()
+    print('{0} cells updated.'.format(result.get('updatedCells')))
+
+
 def batch_update_sheet(service, spreadsheet_id, requests):
+    """Use function to run batchUpdate."""
     body = {
         'requests': requests
     }
@@ -357,15 +358,17 @@ def write_row(service, spreadsheet_id, range_name, values):
 
 
 def main():
-    # 62600001 Tuesday night $25 DU
-    contest_id = 62600001
+    """Use contest ID to update Google Sheet with DFS results."""
+    # 62753724 Thursday night CFB $5 DU
+    # https://www.draftkings.com/contest/exportfullstandingscsv/62753724
+    contest_id = 62753724
     #
-    CSV_URL = 'https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId=21&draftGroupId=22168'
+    # CSV_URL = 'https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId=21&draftGroupId=22168'
 
     # fn = 'DKSalaries_week7_full.csv'
     # fn = 'DKSalaries_Tuesday_basketball.csv'
     dir = path.join('c:', sep, 'users', 'adam', 'documents', 'git', 'dk_salary_owner')
-    fn = 'DKSalaries_Tuesday_basketball.csv'
+    fn = 'DKSalaries_Thursday_CFB.csv'
 
     with open(path.join(dir, fn), mode='r') as f:
         cr = csv.reader(f, delimiter=',')
@@ -390,7 +393,7 @@ def main():
 
     # $50 week 7 contest id 61950009
 
-    # my_list = pull_csv(fn, CSV_URL)
+    # my_list = pull_salary_csv(fn, CSV_URL)
     # for row in my_list:
     #     print(row)
 
@@ -407,6 +410,7 @@ def main():
     #         contest_list = list(cr)
     # else:
     #     contest_list = pull_contest_zip(fn2, contest_id)
+    # contest_list = pull_contest_zip(fn2, contest_id)
     contest_list = pull_contest_zip(fn2, contest_id)
 
     # values
@@ -472,6 +476,7 @@ def main():
     add_column_number_format(service, SPREADSHEET_ID)
     add_header_format(service, SPREADSHEET_ID)
     add_cond_format_rules(service, SPREADSHEET_ID)
+    add_last_updated(service, SPREADSHEET_ID)
 
     # link to get salary for NFL main slate
     # 'https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId=21&draftGroupId=22168'
