@@ -70,6 +70,9 @@ def pull_contest_zip(filename, contest_id):
         rdr = csv.reader(csvfile.splitlines(), delimiter=',')
         # return list
         return list(rdr)
+    elif 'text/html' in r.headers['Content-Type']:
+        print(r.content)
+        exit('We cannot do anything with html!')
     else:
         # request will be a zip file
         z = zipfile.ZipFile(io.BytesIO(r.content))
@@ -136,22 +139,22 @@ def add_column_number_format(service, spreadsheet_id):
         'sheetId': 0,
         'startRowIndex': 1,
         'endRowIndex': 1000,
-        'startColumnIndex': 4,  # E
-        'endColumnIndex': 5
+        'startColumnIndex': 5,  # F
+        'endColumnIndex': 6
     }
     range_points = {
         'sheetId': 0,
         'startRowIndex': 1,
         'endRowIndex': 1000,
-        'startColumnIndex': 5,  # E
-        'endColumnIndex': 6
+        'startColumnIndex': 6,  # G
+        'endColumnIndex': 7
     }
     range_value = {
         'sheetId': 0,
         'startRowIndex': 1,
         'endRowIndex': 1000,
-        'startColumnIndex': 6,  # F
-        'endColumnIndex': 7
+        'startColumnIndex': 7,  # H
+        'endColumnIndex': 8
     }
     requests = [{
         'repeatCell': {
@@ -203,22 +206,22 @@ def add_cond_format_rules(service, spreadsheet_id):
         'sheetId': 0,
         'startRowIndex': 1,
         'endRowIndex': 1001,
-        'startColumnIndex': '4',  # E
-        'endColumnIndex': '5',
+        'startColumnIndex': 5,  # F
+        'endColumnIndex': 6,
     }
     range_points = {
         'sheetId': 0,
         'startRowIndex': 1,
         'endRowIndex': 1001,
-        'startColumnIndex': '5',  # F
-        'endColumnIndex': '6',
+        'startColumnIndex': 6,  # G
+        'endColumnIndex': 7,
     }
     value_range = {
         'sheetId': 0,
         'startRowIndex': 1,
         'endRowIndex': 1001,
-        'startColumnIndex': '6',  # G
-        'endColumnIndex': '7',
+        'startColumnIndex': 7,  # H
+        'endColumnIndex': 8,
     }
     # white --> yellow
     rule_white_yellow = {
@@ -307,7 +310,7 @@ def add_cond_format_rules(service, spreadsheet_id):
 
 def add_last_updated(service, spreadsheet_id):
     """Add (or update) the time in the header."""
-    range = 'Sheet1!H1:I1'
+    range = 'Sheet1!I1:J1'
     values = [
         ['Last Updated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
     ]
@@ -357,18 +360,35 @@ def write_row(service, spreadsheet_id, range_name, values):
     print('{0} cells updated.'.format(result.get('updatedCells')))
 
 
+def get_matchup_info(game_info, team_abbv):
+    # split game info into matchup_info
+    home_team, away_team = game_info.split(' ', 1)[0].split('@')
+    if team_abbv == home_team:
+        matchup_info = "vs. {}".format(away_team)
+    else:
+        matchup_info = "at {}".format(home_team)
+    return matchup_info
+
+
+def get_game_time_info(game_info):
+    return game_info.split(' ', 1)[1]
+
+
 def main():
     """Use contest ID to update Google Sheet with DFS results."""
     # 62753724 Thursday night CFB $5 DU
     # https://www.draftkings.com/contest/exportfullstandingscsv/62753724
-    contest_id = 62753724
-    #
+    contest_id = 62531297
+
+    # 1244542866
     # CSV_URL = 'https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId=21&draftGroupId=22168'
+    # friday night nba slate
+    # https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId=70&draftGroupId=22401
 
     # fn = 'DKSalaries_week7_full.csv'
     # fn = 'DKSalaries_Tuesday_basketball.csv'
     dir = path.join('c:', sep, 'users', 'adam', 'documents', 'git', 'dk_salary_owner')
-    fn = 'DKSalaries_Thursday_CFB.csv'
+    fn = 'DKSalaries_Sunday_NFL.csv'
 
     with open(path.join(dir, fn), mode='r') as f:
         cr = csv.reader(f, delimiter=',')
@@ -382,7 +402,9 @@ def main():
             salary_dict[name] = {}
             salary_dict[name]['salary'] = 0
             salary_dict[name]['team_abbv'] = ''
+
         salary_dict[name]['salary'] = row[5]
+        salary_dict[name]['game_info'] = row[6]
         salary_dict[name]['team_abbv'] = row[7]
 
     # link to get csv export from contest id
@@ -390,12 +412,6 @@ def main():
 
     # client id  837292985707-anvf2dcn7ng1ts9jq1b452qa4rfs5k25.apps.googleusercontent.com
     # secret 4_ifPYAtKg0DTuJ2PJDfsDda
-
-    # $50 week 7 contest id 61950009
-
-    # my_list = pull_salary_csv(fn, CSV_URL)
-    # for row in my_list:
-    #     print(row)
 
     fn2 = "contest-standings-{}.csv".format(contest_id)
 
@@ -431,6 +447,7 @@ def main():
             stats = row[7:]
 
             if stats:
+                # continue if empty (sometimes happens on the player columns in the standings)
                 if all('' == s or s.isspace() for s in stats):
                     continue
                 name = stats[0]
@@ -443,8 +460,13 @@ def main():
                 # print(name)
                 pos = stats[1]
                 salary = int(salary_dict[name]['salary'])
-                # print(salary_dict[name]['team_abbv'])
                 team_abbv = salary_dict[name]['team_abbv']
+                # print(salary_dict[name]['team_abbv'])
+                game_info = salary_dict[name]['game_info']
+
+                matchup_info = get_matchup_info(game_info, team_abbv)
+                game_time = get_game_time_info(game_info)
+
                 perc = float(stats[2].replace('%', '')) / 100
                 pts = float(stats[3])
 
@@ -454,8 +476,10 @@ def main():
                 else:
                     value = 0
                 # print([name, pos, salary, perc, pts, value])
-                values_to_insert.append([name, team_abbv, pos, salary, perc, pts, value])
-                wrtr.writerow([name, team_abbv, pos, salary, perc, pts, value])
+                values_to_insert.append(
+                    [pos, name, team_abbv, matchup_info, salary, perc, pts, value])
+                wrtr.writerow([pos, name, team_abbv, matchup_info,
+                               salary, perc, pts, value])
 
     # google sheets API boilerplate
     SCOPES = 'https://www.googleapis.com/auth/spreadsheets'
@@ -468,14 +492,14 @@ def main():
 
     # Call the Sheets API
     SPREADSHEET_ID = '1Jv5nT-yUoEarkzY5wa7RW0_y0Dqoj8_zDrjeDs-pHL4'
-    RANGE_NAME = 'Sheet1!A2:G'
+    RANGE_NAME = 'Sheet1!A2:H'
 
     print('Starting write_row')
     write_row(service, SPREADSHEET_ID, RANGE_NAME, values_to_insert)
 
     add_column_number_format(service, SPREADSHEET_ID)
     add_header_format(service, SPREADSHEET_ID)
-    add_cond_format_rules(service, SPREADSHEET_ID)
+    # add_cond_format_rules(service, SPREADSHEET_ID)
     add_last_updated(service, SPREADSHEET_ID)
 
     # link to get salary for NFL main slate
