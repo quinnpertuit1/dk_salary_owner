@@ -1,5 +1,5 @@
 """Use contest ID to update Google Sheet with DFS results."""
-import browsercookie
+import argparse
 import csv
 import io
 from os import path, sep
@@ -8,6 +8,7 @@ import requests
 # import unicodedata
 import zipfile
 from datetime import datetime
+import browsercookie
 
 from googleapiclient.discovery import build
 from httplib2 import Http
@@ -99,17 +100,17 @@ def add_header_format(service, spreadsheet_id):
         'startColumnIndex': 0,  # A
         'endColumnIndex': 7,  # F
     }
-    color_white = {'red': 0.0, 'green': 0.0, 'blue': 0.0}
-    color_black = {'red': 1.0, 'green': 1.0, 'blue': 1.0}
+    color_black = {'red': 0.0, 'green': 0.0, 'blue': 0.0}
+    color_white = {'red': 1.0, 'green': 1.0, 'blue': 1.0}
     requests = [{
         'repeatCell': {
             'range': header_range,
             'cell': {
                 'userEnteredFormat': {
-                    'backgroundColor': color_white,
+                    'backgroundColor': color_black,
                     'horizontalAlignment': 'CENTER',
                     'textFormat': {
-                        'foregroundColor': color_black,
+                        'foregroundColor': color_white,
                         'fontFamily': 'Trebuchet MS',
                         'fontSize': 10,
                         'bold': True
@@ -202,6 +203,10 @@ def add_column_number_format(service, spreadsheet_id):
 
 def add_cond_format_rules(service, spreadsheet_id):
     """Add conditional formatting rules to ownership, points, and value fields."""
+    color_yellow = {'red': 1.0, 'green': 0.839, 'blue': 0.4}
+    color_white = {'red': 1.0, 'green': 1.0, 'blue': 1.0}
+    color_red = {'red': 0.92, 'green': 0.486, 'blue': 0.451}
+    color_green = {'red': 0.341, 'green': 0.733, 'blue': 0.541}
     range_ownership = {
         'sheetId': 0,
         'startRowIndex': 1,
@@ -227,53 +232,29 @@ def add_cond_format_rules(service, spreadsheet_id):
     rule_white_yellow = {
         'minpoint': {
             'type': 'MIN',
-            'color': {
-                # white
-                'red': 1.0,
-                'green': 1.0,
-                'blue': 1.0
-
-            }
+            'color': color_white
         },
         'maxpoint': {
             'type': 'MAX',
-            'color': {
-                # yellow
-                'red': 1.0,
-                'green': 0.839,
-                'blue': 0.4
-            }
+            'color': color_yellow
         }
     }
     rule_red_white_green = {
         'minpoint': {
             # red
             'type': 'MIN',
-            'color': {
-                'red': 0.92,
-                'green': 0.486,
-                'blue': 0.451
-
-            }
+            'color': color_red
         },
         'midpoint': {
             # white
             'type': 'PERCENTILE',
             'value': '50',
-            'color': {
-                'red': 1.0,
-                'green': 1.0,
-                'blue': 1.0
-            }
+            'color': color_white
         },
         'maxpoint': {
             # green
             'type': 'MAX',
-            'color': {
-                'red': 0.341,
-                'green': 0.733,
-                'blue': 0.541
-            }
+            'color': color_green
         }
     }
     # red --> white --> green
@@ -322,6 +303,17 @@ def add_last_updated(service, spreadsheet_id):
         spreadsheetId=spreadsheet_id, range=range,
         valueInputOption=value_input_option, body=body).execute()
     print('{0} cells updated.'.format(result.get('updatedCells')))
+
+
+def update_sheet_title(service, spreadsheet_id, title):
+    """Update spreadsheet title to reflect the correct sport."""
+    requests = [{
+        'updateSpreadsheetProperties': {
+            'properties': {'title': title},
+            'fields': 'title'
+        }
+    }]
+    batch_update_sheet(service, spreadsheet_id, requests)
 
 
 def batch_update_sheet(service, spreadsheet_id, requests):
@@ -376,21 +368,36 @@ def get_game_time_info(game_info):
 
 def main():
     """Use contest ID to update Google Sheet with DFS results."""
+
+    # parse arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i', '--id', type=int, required=True,
+                        help='Contest ID from DraftKings',)
+    parser.add_argument('-c', '--csv', required=True, help='Slate CSV from DraftKings',)
+    parser.add_argument('-t', '--type', choices=['NBA', 'NFL', 'CFB'],
+                        required=True, help='Type of contest (NBA, NFL, or CFB)')
+    parser.add_argument('-v', '--verbose', help='Increase verbosity')
+    args = parser.parse_args()
+
     # 62753724 Thursday night CFB $5 DU
     # https://www.draftkings.com/contest/exportfullstandingscsv/62753724
-    contest_id = 62531297
+    contest_id = args.id
+    fn = args.csv
 
     # 1244542866
     # CSV_URL = 'https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId=21&draftGroupId=22168'
+    # draftgroup info
+    # 12 = MLB 21 = NFL 9 = PGA 24 = NASCAR 10 = Soccer 13 = MMA
     # friday night nba slate
     # https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId=70&draftGroupId=22401
 
     # fn = 'DKSalaries_week7_full.csv'
     # fn = 'DKSalaries_Tuesday_basketball.csv'
     dir = path.join('c:', sep, 'users', 'adam', 'documents', 'git', 'dk_salary_owner')
-    fn = 'DKSalaries_Sunday_NFL.csv'
+    # fn = 'DKSalaries_Sunday_NFL.csv'
 
-    with open(path.join(dir, fn), mode='r') as f:
+    # with open(path.join(dir, fn), mode='r') as f:
+    with open(fn, mode='r') as f:
         cr = csv.reader(f, delimiter=',')
         slate_list = list(cr)
 
@@ -501,6 +508,7 @@ def main():
     add_header_format(service, SPREADSHEET_ID)
     # add_cond_format_rules(service, SPREADSHEET_ID)
     add_last_updated(service, SPREADSHEET_ID)
+    update_sheet_title(service, SPREADSHEET_ID, args.type)
 
     # link to get salary for NFL main slate
     # 'https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId=21&draftGroupId=22168'
