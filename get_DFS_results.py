@@ -548,7 +548,7 @@ def main():
                 # wtf is going on with this guy's name?
                 if 'Exum' in name:
                     name = 'Dante Exum'
-                if 'Guillermo' in name:
+                if 'Guillermo Hernan' in name:
                     name = 'Guillermo Hernangomez'
                 if 'Juancho Hernan' in name:
                     name = 'Juancho Hernangomez'
