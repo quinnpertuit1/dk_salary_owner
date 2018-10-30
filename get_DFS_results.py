@@ -2,12 +2,17 @@
 import argparse
 import csv
 import io
-from os import path, sep
+import json
+import re
 import requests
 # from unidecode import unidecode
 # import unicodedata
 import zipfile
+from os import path, sep
+from dateutil import parser
 from datetime import datetime
+
+from bs4 import BeautifulSoup
 import browsercookie
 
 from googleapiclient.discovery import build
@@ -33,6 +38,86 @@ from oauth2client import file, client, tools
 # def strip_accents(s):
 #     return ''.join(c for c in unicodedata.normalize('NFD', s)
 #                    if unicodedata.category(c) != 'Mn')
+
+
+def pull_dk_contests(reload=False):
+    ENDPOINT = 'https://www.draftkings.com/mycontests'
+    filename = 'my_contests.html'
+
+    # pull data
+    soup = pull_soup_data(filename, ENDPOINT)
+
+    # find script(s) in the html
+    script = soup.findAll('script')
+
+    # for i, s in enumerate(script):
+    #     print("{}: {}".format(i, s))
+    js_contest_data = script[133].string
+
+    # pull json object from data variable
+    # pattern = re.compile(r'data = (.*);')
+    pattern = re.compile(r'upcoming: (.*),')
+    json_str = pattern.search(js_contest_data).group(1)
+    contest_json = json.loads(json_str)
+
+    bool_quarters = False
+    now = datetime.now()
+    # iterate through json
+    for contest in contest_json:
+        # print(contest)
+        id = contest['ContestId']
+        name = contest['ContestName']
+        buyin = contest['BuyInAmount']
+        est_starttime = contest['ContestStartDateEdt']
+        top_payout = contest['TopPayout']
+        group_id = contest['DraftGroupId']
+        game_type = contest['GameTypeId']
+
+        # only print quarters contests ServiceAccountCredentials
+        if buyin == 0.25:
+            if bool_quarters:
+                continue
+            else:
+                bool_quarters = True
+
+        dt_starttime = parser.parse(est_starttime)
+        time_until = dt_starttime - now
+
+        print("ID: {} buyin: {} payout: {} est_startime: {} starts in: {} [{}]".format(
+            id, buyin, top_payout, est_starttime, time_until, name))
+        print("group_id: {} game_type: {}".format(group_id, game_type))
+        print("https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId={}&draftGroupId={}".format(game_type, group_id))
+
+
+def pull_soup_data(filename, ENDPOINT):
+    """Either pull file from html or from file."""
+    soup = None
+    if not path.isfile(filename):
+        print("{} does not exist. Pulling from endpoint [{}]".format(filename, ENDPOINT))
+
+        # set cookies based on Chrome session
+        cookies = browsercookie.chrome()
+
+        # send GET request
+        r = requests.get(ENDPOINT, cookies=cookies)
+        status = r.status_code
+
+        # if not successful, raise an exception
+        if status != 200:
+            raise Exception('Requests status != 200. It is: {0}'.format(status))
+
+        # dump html to file to avoid multiple requests
+        with open(filename, 'w') as outfile:
+            print(r.text, file=outfile)
+
+        soup = BeautifulSoup(r.text, 'html5lib')
+    else:
+        print("File exists [{}]. Nice!".format(filename))
+        # load html from file
+        with open(filename, 'r') as html_file:
+            soup = BeautifulSoup(html_file, 'html5lib')
+
+    return soup
 
 
 def pull_salary_csv(filename, csv_url):
@@ -368,6 +453,8 @@ def get_game_time_info(game_info):
 
 def main():
     """Use contest ID to update Google Sheet with DFS results."""
+    # pull_dk_contests()
+    # exit()
 
     # parse arguments
     parser = argparse.ArgumentParser()
@@ -463,6 +550,9 @@ def main():
                     name = 'Dante Exum'
                 if 'Guillermo' in name:
                     name = 'Guillermo Hernangomez'
+                if 'Juancho Hernan' in name:
+                    name = 'Juancho Hernangomez'
+
                 # name = strip_accents(name)
                 # print(name)
                 pos = stats[1]

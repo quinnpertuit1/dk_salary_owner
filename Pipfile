@@ -13,6 +13,9 @@ google-api-python-client = "*"
 "oauth2client" = "*"
 gspread = "*"
 "autopep8" = "*"
+"bs4" = "*"
+"html5lib" = "*"
+python-dateutil = "*"
 
 [dev-packages]
 
