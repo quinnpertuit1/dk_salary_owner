@@ -175,9 +175,8 @@ def pull_contest_zip(filename, contest_id):
                 return list(rdr)
 
 
-def add_header_format(service, spreadsheet_id):
+def add_header_format(service, spreadsheet_id, sheet_id):
     """Format header (row 0) with white text on black blackground."""
-    sheet_id = 0
     header_range = {
         'sheetId': sheet_id,
         'startRowIndex': 0,
@@ -219,24 +218,24 @@ def add_header_format(service, spreadsheet_id):
     batch_update_sheet(service, spreadsheet_id, requests)
 
 
-def add_column_number_format(service, spreadsheet_id):
+def add_column_number_format(service, spreadsheet_id, sheet_id):
     """Format each specified column with explicit number format."""
     range_ownership = {
-        'sheetId': 0,
+        'sheetId': sheet_id,
         'startRowIndex': 1,
         'endRowIndex': 1000,
         'startColumnIndex': 5,  # F
         'endColumnIndex': 6
     }
     range_points = {
-        'sheetId': 0,
+        'sheetId': sheet_id,
         'startRowIndex': 1,
         'endRowIndex': 1000,
         'startColumnIndex': 6,  # G
         'endColumnIndex': 7
     }
     range_value = {
-        'sheetId': 0,
+        'sheetId': sheet_id,
         'startRowIndex': 1,
         'endRowIndex': 1000,
         'startColumnIndex': 7,  # H
@@ -286,28 +285,28 @@ def add_column_number_format(service, spreadsheet_id):
     batch_update_sheet(service, spreadsheet_id, requests)
 
 
-def add_cond_format_rules(service, spreadsheet_id):
+def add_cond_format_rules(service, spreadsheet_id, sheet_id):
     """Add conditional formatting rules to ownership, points, and value fields."""
     color_yellow = {'red': 1.0, 'green': 0.839, 'blue': 0.4}
     color_white = {'red': 1.0, 'green': 1.0, 'blue': 1.0}
     color_red = {'red': 0.92, 'green': 0.486, 'blue': 0.451}
     color_green = {'red': 0.341, 'green': 0.733, 'blue': 0.541}
     range_ownership = {
-        'sheetId': 0,
+        'sheetId': sheet_id,
         'startRowIndex': 1,
         'endRowIndex': 1001,
         'startColumnIndex': 5,  # F
         'endColumnIndex': 6,
     }
     range_points = {
-        'sheetId': 0,
+        'sheetId': sheet_id,
         'startRowIndex': 1,
         'endRowIndex': 1001,
         'startColumnIndex': 6,  # G
         'endColumnIndex': 7,
     }
     value_range = {
-        'sheetId': 0,
+        'sheetId': sheet_id,
         'startRowIndex': 1,
         'endRowIndex': 1001,
         'startColumnIndex': 7,  # H
@@ -370,13 +369,13 @@ def add_cond_format_rules(service, spreadsheet_id):
             'index': 0
         }
     }]
-    print('Applying conditional formatting to sheet')
+    print("Applying conditional formatting to sheet_id {}".format(sheet_id))
     batch_update_sheet(service, spreadsheet_id, requests)
 
 
-def add_last_updated(service, spreadsheet_id):
+def add_last_updated(service, spreadsheet_id, title):
     """Add (or update) the time in the header."""
-    range = 'Sheet1!I1:J1'
+    range = "{}!I1:J1".format(title)
     values = [
         ['Last Updated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
     ]
@@ -437,7 +436,24 @@ def write_row(service, spreadsheet_id, range_name, values):
     print('{0} cells updated.'.format(result.get('updatedCells')))
 
 
+def find_sheet_id(service, spreadsheet_id, title):
+    sheet_metadata = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    sheets = sheet_metadata.get('sheets', '')
+    for sheet in sheets:
+        if title in sheet['properties']['title']:
+            print("ID for {} is {}".format(title, sheet['properties']['sheetId']))
+            return sheet['properties']['sheetId']
+    # title = sheets[0].get("properties", {}).get("title", "Sheet1")
+    # sheet_id = sheets[0].get("properties", {}).get("sheetId", 0)
+    # print(title)
+    # print(sheet_id)
+
+
 def get_matchup_info(game_info, team_abbv):
+    # wth is this?
+    if game_info in ['In Progress', 'Final']:
+        return game_info
+
     # split game info into matchup_info
     home_team, away_team = game_info.split(' ', 1)[0].split('@')
     if team_abbv == home_team:
@@ -448,11 +464,120 @@ def get_matchup_info(game_info, team_abbv):
 
 
 def get_game_time_info(game_info):
+    if game_info in ['In Progress', 'Final']:
+        return game_info
     return game_info.split(' ', 1)[1]
+
+
+def parse_lineup(lineup, bro, points, pmr, rank, player_dict):
+    splt = lineup.split(' ')
+
+    positions = ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'UTIL']
+    # list comp for indicies of positions in splt
+    indices = [i for i, l in enumerate(splt) if l in positions]
+    # list comp for ending indices in splt. for splicing, the second argument is exclusive
+    end_indices = [indices[i] for i in range(1, len(indices))]
+    # append size of splt as last index
+    end_indices.append(len(splt))
+
+    # lineup = {splt[index]: ' '.join(splt[index + 1:end_indices[i]]) for i, index in enumerate(indices)}
+    pts = 0
+    results = {
+        bro: {  # bro name
+            'rank': rank,
+            'pmr': pmr,
+            'points': points
+        }
+    }
+    # :
+    for i, index in enumerate(indices):
+        pos = splt[index]
+        s = slice(index + 1, end_indices[i])
+        name = splt[s]
+        if name != 'LOCKED':
+            name = ' '.join(name)
+            if name in player_dict:
+                pts = player_dict[name]['pts']
+                value = player_dict[name]['value']
+
+        results[bro][pos] = {
+            'name': name,
+            'pts': pts,
+            'value': value
+        }
+    return results
+
+
+def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
+    if sport != 'NBA':
+        return
+
+    range = "{}!K3:N15".format(sport)
+    # print(lineup)
+    values = []
+    for k, bro in lineup.items():
+        values = [
+            [k, '', 'PMR', bro['pmr']],
+            ['Position', 'Player', 'Points', 'Value'],
+            ['PG', bro['PG']['name'], bro['PG']['pts'], bro['PG']['value']],
+            ['SG', bro['SG']['name'], bro['SG']['pts'], bro['SG']['value']],
+            ['SF', bro['SF']['name'], bro['SF']['pts'], bro['SF']['value']],
+            ['PF', bro['PF']['name'], bro['PF']['pts'], bro['PF']['value']],
+            ['C', bro['C']['name'], bro['C']['pts'], bro['C']['value']],
+            ['G', bro['G']['name'], bro['G']['pts'], bro['G']['value']],
+            ['F', bro['F']['name'], bro['F']['pts'], bro['F']['value']],
+            ['UTIL', bro['UTIL']['name'], bro['UTIL']['pts'], bro['UTIL']['value']],
+            ['', '', bro['points']]
+            # [lineup['PG'], lineup['SG'], lineup['SF'], lineup['PF'], lineup['C'], lineup['G'], lineup['F'], lineup['UTIL']],
+        ]
+    # values = [
+    #     ['Last Updated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
+    # ]
+    body = {
+        'values': values
+    }
+    value_input_option = 'USER_ENTERED'
+    result = service.spreadsheets().values().update(
+        spreadsheetId=spreadsheet_id, range=range,
+        valueInputOption=value_input_option, body=body).execute()
+    print('{0} cells updated.'.format(result.get('updatedCells')))
+
+
+def read_salary_csv(fn):
+    with open(fn, mode='r') as f:
+        cr = csv.reader(f, delimiter=',')
+        slate_list = list(cr)
+
+        salary = {}
+        for row in slate_list[1:]:
+            if len(row) < 2:
+                continue
+            name = row[2]
+            if name not in salary:
+                salary[name] = {}
+                salary[name]['salary'] = 0
+                salary[name]['team_abbv'] = ''
+
+            salary[name]['salary'] = row[5]
+            salary[name]['game_info'] = row[6]
+            salary[name]['team_abbv'] = row[7]
+        return salary
+
+
+def massage_name(name):
+    # wtf is going on with these guys' names?
+    if 'Exum' in name:
+        name = 'Dante Exum'
+    if 'Guillermo Hernan' in name:
+        name = 'Guillermo Hernangomez'
+    if 'Juancho Hernan' in name:
+        name = 'Juancho Hernangomez'
+    return name
 
 
 def main():
     """Use contest ID to update Google Sheet with DFS results."""
+    # 63149608
     # pull_dk_contests()
     # exit()
 
@@ -461,8 +586,8 @@ def main():
     parser.add_argument('-i', '--id', type=int, required=True,
                         help='Contest ID from DraftKings',)
     parser.add_argument('-c', '--csv', required=True, help='Slate CSV from DraftKings',)
-    parser.add_argument('-t', '--type', choices=['NBA', 'NFL', 'CFB'],
-                        required=True, help='Type of contest (NBA, NFL, or CFB)')
+    parser.add_argument('-s', '--sport', choices=['NBA', 'NFL', 'CFB', 'PGA'],
+                        required=True, help='Type of contest (NBA, NFL, PGA, or CFB)')
     parser.add_argument('-v', '--verbose', help='Increase verbosity')
     args = parser.parse_args()
 
@@ -483,23 +608,7 @@ def main():
     dir = path.join('c:', sep, 'users', 'adam', 'documents', 'git', 'dk_salary_owner')
     # fn = 'DKSalaries_Sunday_NFL.csv'
 
-    # with open(path.join(dir, fn), mode='r') as f:
-    with open(fn, mode='r') as f:
-        cr = csv.reader(f, delimiter=',')
-        slate_list = list(cr)
-
-    salary_dict = {}
-    # salary_dict = {row[2]: row[5] for row in slate_list}
-    for row in slate_list[1:]:
-        name = row[2]
-        if name not in salary_dict:
-            salary_dict[name] = {}
-            salary_dict[name]['salary'] = 0
-            salary_dict[name]['team_abbv'] = ''
-
-        salary_dict[name]['salary'] = row[5]
-        salary_dict[name]['game_info'] = row[6]
-        salary_dict[name]['team_abbv'] = row[7]
+    salary_dict = read_salary_csv(fn)
 
     # link to get csv export from contest id
     # https://www.draftkings.com/contest/exportfullstandingscsv/62252398
@@ -508,75 +617,66 @@ def main():
     # secret 4_ifPYAtKg0DTuJ2PJDfsDda
 
     fn2 = "contest-standings-{}.csv".format(contest_id)
-
-    # contest_list = pull_contest_zip(fn2, contest_id)
-    # fn2 = "contest-standings-61950009_finished.csv"
-    # if path.exists(fn2):
-    #     print("{0} exists".format(fn2))
-    #     with open(fn2, mode='r') as f:
-    #         # lines = io.TextIOWrapper(f, newline='\r\n')
-    #         # print(lines)
-    #         cr = csv.reader(f, delimiter=',')
-    #         contest_list = list(cr)
-    # else:
-    #     contest_list = pull_contest_zip(fn2, contest_id)
-    # contest_list = pull_contest_zip(fn2, contest_id)
     contest_list = pull_contest_zip(fn2, contest_id)
 
-    # values
-    # values = [
-    #     [
-    #         'A', 'B', 'C', 'D', 'E', 'F'
-    #     ],
-    #     [
-    #         '1', '2', '3', '4', '5', '6'
-    #     ]
-    #     # etc
-    # ]
+    # values = interate_contest_list(contest_list, salary_dict, args.sport)
+    bros = ['aplewandowski', 'FlyntCoal', 'Cubbiesftw23', 'Mcoleman1902', 'cglenn91']
+    values = []
+    sport = args.sport
+    bro_lineups = {}
+    player_dict = {}
+    for i, row in enumerate(contest_list[1:]):
+        rank = row[0]
+        name = row[2]
+        pmr = row[3]
+        points = row[4]
+        lineup = row[5]
 
-    values_to_insert = []
-    with open(path.join(dir, 'output.csv'), mode='w', newline='') as out:
-        wrtr = csv.writer(out, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        for i, row in enumerate(contest_list[1:]):
-            stats = row[7:]
+        if name in bros:
+            print("found bro {}".format(name))
+            bro_lineups[name] = {
+                'rank': rank,
+                'lineup': lineup,
+                'pmr': pmr,
+                'points': points
+            }
 
-            if stats:
-                # continue if empty (sometimes happens on the player columns in the standings)
-                if all('' == s or s.isspace() for s in stats):
-                    continue
-                name = stats[0]
-                # wtf is going on with this guy's name?
-                if 'Exum' in name:
-                    name = 'Dante Exum'
-                if 'Guillermo Hernan' in name:
-                    name = 'Guillermo Hernangomez'
-                if 'Juancho Hernan' in name:
-                    name = 'Juancho Hernangomez'
+        stats = row[7:]
+        if stats:
+            # continue if empty (sometimes happens on the player columns in the standings)
+            if all('' == s or s.isspace() for s in stats):
+                continue
 
-                # name = strip_accents(name)
-                # print(name)
-                pos = stats[1]
-                salary = int(salary_dict[name]['salary'])
+            name = massage_name(stats[0])
+            pos = stats[1]
+            salary = int(salary_dict[name]['salary'])
+            if sport != 'PGA':
                 team_abbv = salary_dict[name]['team_abbv']
-                # print(salary_dict[name]['team_abbv'])
                 game_info = salary_dict[name]['game_info']
-
                 matchup_info = get_matchup_info(game_info, team_abbv)
                 game_time = get_game_time_info(game_info)
+            else:
+                team_abbv = ''
+                matchup_info = ''
 
-                perc = float(stats[2].replace('%', '')) / 100
-                pts = float(stats[3])
+            perc = float(stats[2].replace('%', '')) / 100
+            pts = float(stats[3])
 
-                # calculate value
-                if pts > 0:
-                    value = pts / (salary / 1000)
-                else:
-                    value = 0
-                # print([name, pos, salary, perc, pts, value])
-                values_to_insert.append(
-                    [pos, name, team_abbv, matchup_info, salary, perc, pts, value])
-                wrtr.writerow([pos, name, team_abbv, matchup_info,
-                               salary, perc, pts, value])
+            # calculate value
+            if pts > 0:
+                value = pts / (salary / 1000)
+            else:
+                value = 0
+
+            player_dict[name] = {
+                'pos': pos,
+                'salary': salary,
+                'perc': perc,
+                'pts': pts,
+                'value': value
+            }
+            # print([name, pos, salary, perc, pts, value])
+            values.append([pos, name, team_abbv, matchup_info, salary, perc, pts, value])
 
     # google sheets API boilerplate
     SCOPES = 'https://www.googleapis.com/auth/spreadsheets'
@@ -587,18 +687,25 @@ def main():
         creds = tools.run_flow(flow, store)
     service = build('sheets', 'v4', http=creds.authorize(Http()))
 
+    for bro, v in bro_lineups.items():
+        parsed_lineup = parse_lineup(v['lineup'], bro, v['points'], v['pmr'], v['rank'], player_dict)
+
     # Call the Sheets API
-    SPREADSHEET_ID = '1Jv5nT-yUoEarkzY5wa7RW0_y0Dqoj8_zDrjeDs-pHL4'
-    RANGE_NAME = 'Sheet1!A2:H'
+    spreadsheet_id = '1Jv5nT-yUoEarkzY5wa7RW0_y0Dqoj8_zDrjeDs-pHL4'
+    RANGE_NAME = "{}!A2:H".format(args.sport)
+    sheet_id = find_sheet_id(service, spreadsheet_id, args.sport)
 
     print('Starting write_row')
-    write_row(service, SPREADSHEET_ID, RANGE_NAME, values_to_insert)
-
-    add_column_number_format(service, SPREADSHEET_ID)
-    add_header_format(service, SPREADSHEET_ID)
-    # add_cond_format_rules(service, SPREADSHEET_ID)
-    add_last_updated(service, SPREADSHEET_ID)
-    update_sheet_title(service, SPREADSHEET_ID, args.type)
+    write_row(service, spreadsheet_id, RANGE_NAME, values)
+    if parsed_lineup:
+        print('Writing lineup')
+        print(parsed_lineup)
+        write_lineup(service, spreadsheet_id, sheet_id, parsed_lineup, args.sport)
+    add_column_number_format(service, spreadsheet_id, sheet_id)
+    add_header_format(service, spreadsheet_id, sheet_id)
+    # add_cond_format_rules(service, spreadsheet_id, sheet_id)
+    add_last_updated(service, spreadsheet_id, args.sport)
+    # update_sheet_title(service, spreadsheet_id, sheet_id, args.sport)
 
     # link to get salary for NFL main slate
     # 'https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId=21&draftGroupId=22168'
