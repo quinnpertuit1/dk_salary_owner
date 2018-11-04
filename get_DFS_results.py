@@ -169,7 +169,7 @@ def pull_contest_zip(filename, contest_id):
             with z.open(name) as csvfile:
                 print("name within zipfile".format(name))
                 # convert to TextIOWrapper object
-                lines = io.TextIOWrapper(csvfile, newline='\r\n')
+                lines = io.TextIOWrapper(csvfile, encoding='utf-8', newline='\r\n')
                 # open reader object on csvfile within zip file
                 rdr = csv.reader(lines, delimiter=',')
                 return list(rdr)
@@ -441,7 +441,7 @@ def find_sheet_id(service, spreadsheet_id, title):
     sheets = sheet_metadata.get('sheets', '')
     for sheet in sheets:
         if title in sheet['properties']['title']:
-            print("ID for {} is {}".format(title, sheet['properties']['sheetId']))
+            print("Sheet ID for {} is {}".format(title, sheet['properties']['sheetId']))
             return sheet['properties']['sheetId']
     # title = sheets[0].get("properties", {}).get("title", "Sheet1")
     # sheet_id = sheets[0].get("properties", {}).get("sheetId", 0)
@@ -469,7 +469,7 @@ def get_game_time_info(game_info):
     return game_info.split(' ', 1)[1]
 
 
-def parse_lineup(lineup, bro, points, pmr, rank, player_dict):
+def parse_lineup(lineup, points, pmr, rank, player_dict):
     splt = lineup.split(' ')
 
     positions = ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'UTIL']
@@ -481,15 +481,13 @@ def parse_lineup(lineup, bro, points, pmr, rank, player_dict):
     end_indices.append(len(splt))
 
     # lineup = {splt[index]: ' '.join(splt[index + 1:end_indices[i]]) for i, index in enumerate(indices)}
-    pts = 0
     results = {
-        bro: {  # bro name
-            'rank': rank,
-            'pmr': pmr,
-            'points': points
-        }
+        'rank': rank,
+        'pmr': pmr,
+        'points': points
     }
-    # :
+    pts = 0
+    value = 0
     for i, index in enumerate(indices):
         pos = splt[index]
         s = slice(index + 1, end_indices[i])
@@ -499,8 +497,11 @@ def parse_lineup(lineup, bro, points, pmr, rank, player_dict):
             if name in player_dict:
                 pts = player_dict[name]['pts']
                 value = player_dict[name]['value']
+            else:
+                pts = None
+                value = None
 
-        results[bro][pos] = {
+        results[pos] = {
             'name': name,
             'pts': pts,
             'value': value
@@ -508,39 +509,76 @@ def parse_lineup(lineup, bro, points, pmr, rank, player_dict):
     return results
 
 
-def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
-    if sport != 'NBA':
-        return
+def write_NBA_lineup(lineup, bro):
+    values = [
+        [bro, '', 'PMR', lineup['pmr']],
+        ['Position', 'Player', 'Points', 'Value'],
+        ['PG', lineup['PG']['name'], lineup['PG']['pts'], lineup['PG']['value']],
+        ['SG', lineup['SG']['name'], lineup['SG']['pts'], lineup['SG']['value']],
+        ['SF', lineup['SF']['name'], lineup['SF']['pts'], lineup['SF']['value']],
+        ['PF', lineup['PF']['name'], lineup['PF']['pts'], lineup['PF']['value']],
+        ['C', lineup['C']['name'], lineup['C']['pts'], lineup['C']['value']],
+        ['G', lineup['G']['name'], lineup['G']['pts'], lineup['G']['value']],
+        ['F', lineup['F']['name'], lineup['F']['pts'], lineup['F']['value']],
+        ['UTIL', lineup['UTIL']['name'], lineup['UTIL']['pts'], lineup['UTIL']['value']],
+        ['rank', lineup['rank'], lineup['points']]
+    ]
+    return values
 
-    range = "{}!K3:N15".format(sport)
-    # print(lineup)
+
+def write_CFB_lineup(lineup):
     values = []
     for k, bro in lineup.items():
         values = [
             [k, '', 'PMR', bro['pmr']],
             ['Position', 'Player', 'Points', 'Value'],
-            ['PG', bro['PG']['name'], bro['PG']['pts'], bro['PG']['value']],
-            ['SG', bro['SG']['name'], bro['SG']['pts'], bro['SG']['value']],
-            ['SF', bro['SF']['name'], bro['SF']['pts'], bro['SF']['value']],
-            ['PF', bro['PF']['name'], bro['PF']['pts'], bro['PF']['value']],
-            ['C', bro['C']['name'], bro['C']['pts'], bro['C']['value']],
-            ['G', bro['G']['name'], bro['G']['pts'], bro['G']['value']],
-            ['F', bro['F']['name'], bro['F']['pts'], bro['F']['value']],
-            ['UTIL', bro['UTIL']['name'], bro['UTIL']['pts'], bro['UTIL']['value']],
+            ['QB', bro['QB']['name'], bro['QB']['pts'], bro['QB']['value']],
+            ['RB', bro['SG']['name'], bro['SG']['pts'], bro['SG']['value']],
+            ['RB', bro['SF']['name'], bro['SF']['pts'], bro['SF']['value']],
+            ['WR', bro['PF']['name'], bro['PF']['pts'], bro['PF']['value']],
+            ['WR', bro['C']['name'], bro['C']['pts'], bro['C']['value']],
+            ['WR', bro['G']['name'], bro['G']['pts'], bro['G']['value']],
+            ['FLEX', bro['F']['name'], bro['F']['pts'], bro['F']['value']],
+            ['SFLEX', bro['UTIL']['name'], bro['UTIL']['pts'], bro['UTIL']['value']],
             ['', '', bro['points']]
-            # [lineup['PG'], lineup['SG'], lineup['SF'], lineup['PF'], lineup['C'], lineup['G'], lineup['F'], lineup['UTIL']],
         ]
+    return values
+
+
+def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
+    if sport not in ['NBA']:
+        return
+
+    print("Sport == {} - trying to write_lineup()..".format(sport))
+
+    # range 1 K3:N15  range 4: P3:S15
+    # range 2 K15:N25 range 5: P15:S25
+    # range 3 K27:N37 range 6: P27:S37
+    ranges = [
+        "{}!K3:N15".format(sport),
+        "{}!K15:N25".format(sport),
+        "{}!K27:N37".format(sport),
+        "{}!P3:S15".format(sport),
+        "{}!P15:S25".format(sport),
+        "{}!P27:S37".format(sport)
+    ]
+
+    # print(lineup)
+    if sport == 'NBA':
+        for i, (k, v) in enumerate(lineup.items()):
+            # print("i: {} K: {}\nv:{}".format(i, k, v))
+            values = write_NBA_lineup(v, k)
+            print("trying to write line [{}] to {}".format(k, ranges[i]))
+            write_row(service, spreadsheet_id, ranges[i], values)
+
+    elif sport == 'CFB':
+        values = write_CFB_lineup(lineup)
+
     # values = [
     #     ['Last Updated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
     # ]
-    body = {
-        'values': values
-    }
-    value_input_option = 'USER_ENTERED'
-    result = service.spreadsheets().values().update(
-        spreadsheetId=spreadsheet_id, range=range,
-        valueInputOption=value_input_option, body=body).execute()
-    print('{0} cells updated.'.format(result.get('updatedCells')))
+
+    # write_row(service, spreadsheet_id, RANGE_NAME, values)
 
 
 def read_salary_csv(fn):
@@ -572,6 +610,8 @@ def massage_name(name):
         name = 'Guillermo Hernangomez'
     if 'Juancho Hernan' in name:
         name = 'Juancho Hernangomez'
+    if 'lex Abrines' in name:
+        name = 'Alex Abrines'
     return name
 
 
@@ -618,9 +658,10 @@ def main():
 
     fn2 = "contest-standings-{}.csv".format(contest_id)
     contest_list = pull_contest_zip(fn2, contest_id)
-
+    parsed_lineup = {}
     # values = interate_contest_list(contest_list, salary_dict, args.sport)
-    bros = ['aplewandowski', 'FlyntCoal', 'Cubbiesftw23', 'Mcoleman1902', 'cglenn91']
+    bros = ['aplewandowski', 'FlyntCoal', 'Cubbiesftw23',
+            'Mcoleman1902', 'cglenn91', 'Notorious']
     values = []
     sport = args.sport
     bro_lineups = {}
@@ -688,18 +729,18 @@ def main():
     service = build('sheets', 'v4', http=creds.authorize(Http()))
 
     for bro, v in bro_lineups.items():
-        parsed_lineup = parse_lineup(v['lineup'], bro, v['points'], v['pmr'], v['rank'], player_dict)
+        parsed_lineup[bro] = parse_lineup(
+            v['lineup'], v['points'], v['pmr'], v['rank'], player_dict)
 
     # Call the Sheets API
     spreadsheet_id = '1Jv5nT-yUoEarkzY5wa7RW0_y0Dqoj8_zDrjeDs-pHL4'
-    RANGE_NAME = "{}!A2:H".format(args.sport)
+    RANGE_NAME = "{}!A2:S".format(args.sport)
     sheet_id = find_sheet_id(service, spreadsheet_id, args.sport)
 
     print('Starting write_row')
     write_row(service, spreadsheet_id, RANGE_NAME, values)
     if parsed_lineup:
         print('Writing lineup')
-        print(parsed_lineup)
         write_lineup(service, spreadsheet_id, sheet_id, parsed_lineup, args.sport)
     add_column_number_format(service, spreadsheet_id, sheet_id)
     add_header_format(service, spreadsheet_id, sheet_id)
