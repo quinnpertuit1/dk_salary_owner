@@ -6,11 +6,12 @@ import json
 import re
 import requests
 # from unidecode import unidecode
-# import unicodedata
+import unicodedata
 import zipfile
 from os import path, sep
 from dateutil import parser
-from datetime import datetime
+# from datetime import datetime
+import datetime
 
 from bs4 import BeautifulSoup
 import browsercookie
@@ -40,6 +41,30 @@ from oauth2client import file, client, tools
 #                    if unicodedata.category(c) != 'Mn')
 
 
+class EST5EDT(datetime.tzinfo):
+
+    def utcoffset(self, dt):
+        return datetime.timedelta(hours=-5) + self.dst(dt)
+
+    def dst(self, dt):
+        d = datetime.datetime(dt.year, 3, 8)  # 2nd Sunday in March
+        self.dston = d + datetime.timedelta(days=6-d.weekday())
+        d = datetime.datetime(dt.year, 11, 1)  # 1st Sunday in Nov
+        self.dstoff = d + datetime.timedelta(days=6-d.weekday())
+        if self.dston <= dt.replace(tzinfo=None) < self.dstoff:
+            return datetime.timedelta(hours=1)
+        else:
+            return datetime.timedelta(0)
+
+    def tzname(self, dt):
+        return 'EST5EDT'
+
+
+def strip_accents(s):
+    return ''.join(c for c in unicodedata.normalize('NFD', s)
+                   if unicodedata.category(c) != 'Mn')
+
+
 def pull_dk_contests(reload=False):
     ENDPOINT = 'https://www.draftkings.com/mycontests'
     filename = 'my_contests.html'
@@ -61,7 +86,7 @@ def pull_dk_contests(reload=False):
     contest_json = json.loads(json_str)
 
     bool_quarters = False
-    now = datetime.now()
+    now = datetime.datetime.now()
     # iterate through json
     for contest in contest_json:
         # print(contest)
@@ -376,8 +401,9 @@ def add_cond_format_rules(service, spreadsheet_id, sheet_id):
 def add_last_updated(service, spreadsheet_id, title):
     """Add (or update) the time in the header."""
     range = "{}!I1:J1".format(title)
+    now = datetime.datetime.now(tz=EST5EDT())
     values = [
-        ['Last Updated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
+        ['Last Updated', now.strftime('%Y-%m-%d %H:%M:%S')]
     ]
     body = {
         'values': values
@@ -469,31 +495,47 @@ def get_game_time_info(game_info):
     return game_info.split(' ', 1)[1]
 
 
-def parse_lineup(lineup, points, pmr, rank, player_dict):
+def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
     splt = lineup.split(' ')
 
-    positions = ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'UTIL']
-    # list comp for indicies of positions in splt
-    indices = [i for i, l in enumerate(splt) if l in positions]
-    # list comp for ending indices in splt. for splicing, the second argument is exclusive
-    end_indices = [indices[i] for i in range(1, len(indices))]
-    # append size of splt as last index
-    end_indices.append(len(splt))
-
-    # lineup = {splt[index]: ' '.join(splt[index + 1:end_indices[i]]) for i, index in enumerate(indices)}
     results = {
         'rank': rank,
         'pmr': pmr,
         'points': points
     }
+
+    if sport == 'NBA':
+        positions = ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'UTIL']
+        # list comp for indicies of positions in splt
+        indices = [i for i, l in enumerate(splt) if l in positions]
+        # list comp for ending indices in splt. for splicing, the second argument is exclusive
+        end_indices = [indices[i] for i in range(1, len(indices))]
+        # append size of splt as last index
+        end_indices.append(len(splt))
+
+    elif sport == 'PGA':
+        position = 'G'
+        # list comp for indicies of positions in splt
+        indices = [i for i, l in enumerate(splt) if l == position]
+        # list comp for ending indices in splt. for splicing, the second argument is exclusive
+        end_indices = [indices[i] for i in range(1, len(indices))]
+        # append size of splt as last index
+        end_indices.append(len(splt))
+
     pts = 0
     value = 0
+
     for i, index in enumerate(indices):
         pos = splt[index]
+
         s = slice(index + 1, end_indices[i])
         name = splt[s]
         if name != 'LOCKED':
             name = ' '.join(name)
+
+            # ensure name doesn't have any weird characters
+            name = strip_accents(name)
+
             if name in player_dict:
                 pts = player_dict[name]['pts']
                 value = player_dict[name]['value']
@@ -501,28 +543,38 @@ def parse_lineup(lineup, points, pmr, rank, player_dict):
                 pts = None
                 value = None
 
-        results[pos] = {
-            'name': name,
-            'pts': pts,
-            'value': value
-        }
+        if sport == 'NBA':
+            results[pos] = {
+                'name': name,
+                'pts': pts,
+                'value': value
+            }
+        elif sport == 'PGA':
+            # because PGA has all 'G', create a list rather than a dictionary
+            if pos not in results:
+                results[pos] = []
+
+            # append each golfer to the results['G'] list
+            results[pos].append({
+                'name': name,
+                'pts': pts,
+                'value': value
+            })
+    print(results)
     return results
 
 
 def write_NBA_lineup(lineup, bro):
+    ordered_position = ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'UTIL']
     values = [
         [bro, '', 'PMR', lineup['pmr']],
-        ['Position', 'Player', 'Points', 'Value'],
-        ['PG', lineup['PG']['name'], lineup['PG']['pts'], lineup['PG']['value']],
-        ['SG', lineup['SG']['name'], lineup['SG']['pts'], lineup['SG']['value']],
-        ['SF', lineup['SF']['name'], lineup['SF']['pts'], lineup['SF']['value']],
-        ['PF', lineup['PF']['name'], lineup['PF']['pts'], lineup['PF']['value']],
-        ['C', lineup['C']['name'], lineup['C']['pts'], lineup['C']['value']],
-        ['G', lineup['G']['name'], lineup['G']['pts'], lineup['G']['value']],
-        ['F', lineup['F']['name'], lineup['F']['pts'], lineup['F']['value']],
-        ['UTIL', lineup['UTIL']['name'], lineup['UTIL']['pts'], lineup['UTIL']['value']],
-        ['rank', lineup['rank'], lineup['points']]
+        ['Position', 'Player', 'Points', 'Value']
     ]
+    for position in ordered_position:
+        values.append([position, lineup[position]['name'],
+                       lineup[position]['pts'], lineup[position]['value']])
+
+    values.append(['rank', lineup['rank'], lineup['points'], ''])
     return values
 
 
@@ -545,8 +597,20 @@ def write_CFB_lineup(lineup):
     return values
 
 
+def write_PGA_lineup(lineup, bro):
+    values = [
+        [bro, '', 'PMR', lineup['pmr']],
+        ['Position', 'Player', 'Points', 'Value']
+    ]
+    for golfer in lineup['G']:
+        values.append(['G', golfer['name'], golfer['pts'], golfer['value']])
+
+    values.append(['rank', lineup['rank'], lineup['points'], ''])
+    return values
+
+
 def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
-    if sport not in ['NBA']:
+    if sport not in ['NBA', 'PGA']:
         return
 
     print("Sport == {} - trying to write_lineup()..".format(sport))
@@ -573,6 +637,12 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
 
     elif sport == 'CFB':
         values = write_CFB_lineup(lineup)
+    elif sport == 'PGA':
+        for i, (k, v) in enumerate(lineup.items()):
+            # print("i: {} K: {}\nv:{}".format(i, k, v))
+            values = write_PGA_lineup(v, k)
+            print("trying to write line [{}] to {}".format(k, ranges[i]))
+            write_row(service, spreadsheet_id, ranges[i], values)
 
     # values = [
     #     ['Last Updated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
@@ -609,6 +679,7 @@ def massage_name(name):
     if 'Guillermo Hernan' in name:
         name = 'Guillermo Hernangomez'
     if 'Juancho Hernan' in name:
+        print("Found Juancho!")
         name = 'Juancho Hernangomez'
     if 'lex Abrines' in name:
         name = 'Alex Abrines'
@@ -645,7 +716,8 @@ def main():
 
     # fn = 'DKSalaries_week7_full.csv'
     # fn = 'DKSalaries_Tuesday_basketball.csv'
-    dir = path.join('c:', sep, 'users', 'adam', 'documents', 'git', 'dk_salary_owner')
+    # dir = path.join('c:', sep, 'users', 'adam', 'documents', 'git', 'dk_salary_owner')
+    dir = '/home/pi/Desktop/dk_salary_owner'
     # fn = 'DKSalaries_Sunday_NFL.csv'
 
     salary_dict = read_salary_csv(fn)
@@ -656,6 +728,8 @@ def main():
     # client id  837292985707-anvf2dcn7ng1ts9jq1b452qa4rfs5k25.apps.googleusercontent.com
     # secret 4_ifPYAtKg0DTuJ2PJDfsDda
 
+    now = datetime.datetime.now()
+    print("Current time: {}".format(now))
     fn2 = "contest-standings-{}.csv".format(contest_id)
     contest_list = pull_contest_zip(fn2, contest_id)
     parsed_lineup = {}
@@ -730,7 +804,7 @@ def main():
 
     for bro, v in bro_lineups.items():
         parsed_lineup[bro] = parse_lineup(
-            v['lineup'], v['points'], v['pmr'], v['rank'], player_dict)
+            sport, v['lineup'], v['points'], v['pmr'], v['rank'], player_dict)
 
     # Call the Sheets API
     spreadsheet_id = '1Jv5nT-yUoEarkzY5wa7RW0_y0Dqoj8_zDrjeDs-pHL4'

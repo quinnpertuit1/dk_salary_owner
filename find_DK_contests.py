@@ -112,19 +112,16 @@ def pull_dk_contests(sport=None, reload=False):
 
             # only print if sport is in the name (or default None)
             if sport is None or sport in name:
-                print("\n\n{}\n\n".format(contest))
-                print("-----------------------------")
-                print("ID: {} [{}]".format(id, name))
-                print("buy in: {} payout: {}".format(buyin, top_payout))
-                print("start_date: {} [starts in: {}]".format(
-                    start_date, time_until))
-                print("pts_thresh: {}".format(pts_thresh))
-                print("group_id: {} game_type: {}".format(group_id, game_type))
+                # print("\n\n{}\n\n".format(contest))
+                # print("-----------------------------")
+                print("ID: {} [{}] buy in: {} payout: {} start_date: {} [starts in: {}] group_id: {} game_type: {}".format(
+                    id, name, buyin, top_payout, start_date, time_until, group_id, game_type))
                 # print("https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId={}&draftGroupId={}".format(game_type, group_id))
     return contest_dict
 
 
 def get_csv_url(sport, contests):
+    """Given a sport, return the salary export URL based on game_type/group_id."""
     for k, v in contests.items():
         if sport in v['name']:
             game_type = v['game_type']
@@ -142,6 +139,7 @@ def get_sport_day(sport, contests):
 
 
 def main():
+
     # parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -154,9 +152,10 @@ def main():
         day = get_sport_day(args.sport, contests)
         print(day)
         filename = "DKSalaries_{0}_{1}.csv".format(args.sport, day)
+        # print(filename)
         print(csv_url)
-        print(filename)
-        pull_soup_data(filename, csv_url, ignore_file=True)
+
+        # pull_soup_data(filename, csv_url, ignore_file=True)
     else:
         contests = pull_dk_contests()
 
