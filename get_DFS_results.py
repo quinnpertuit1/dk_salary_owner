@@ -496,6 +496,7 @@ def get_game_time_info(game_info):
 
 
 def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
+
     splt = lineup.split(' ')
 
     results = {
@@ -507,16 +508,31 @@ def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
     if sport == 'NBA':
         positions = ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'UTIL']
         # list comp for indicies of positions in splt
-        indices = [i for i, l in enumerate(splt) if l in positions]
+        indices = [i for i, pos in enumerate(splt) if pos in positions]
         # list comp for ending indices in splt. for splicing, the second argument is exclusive
         end_indices = [indices[i] for i in range(1, len(indices))]
         # append size of splt as last index
         end_indices.append(len(splt))
-
     elif sport == 'PGA':
         position = 'G'
         # list comp for indicies of positions in splt
-        indices = [i for i, l in enumerate(splt) if l == position]
+        indices = [i for i, pos in enumerate(splt) if pos == position]
+        # list comp for ending indices in splt. for splicing, the second argument is exclusive
+        end_indices = [indices[i] for i in range(1, len(indices))]
+        # append size of splt as last index
+        end_indices.append(len(splt))
+    elif sport == 'NFL':
+        positions = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'DST']
+        # list comp for indicies of positions in splt
+        indices = [i for i, pos in enumerate(splt) if pos in positions]
+        # list comp for ending indices in splt. for splicing, the second argument is exclusive
+        end_indices = [indices[i] for i in range(1, len(indices))]
+        # append size of splt as last index
+        end_indices.append(len(splt))
+    elif sport == 'CFB':
+        positions = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'S-FLEX']
+        # list comp for indicies of positions in splt
+        indices = [i for i, pos in enumerate(splt) if pos in positions]
         # list comp for ending indices in splt. for splicing, the second argument is exclusive
         end_indices = [indices[i] for i in range(1, len(indices))]
         # append size of splt as last index
@@ -560,6 +576,25 @@ def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
                 'pts': pts,
                 'value': value
             })
+        elif sport == 'NFL' or sport == 'CFB':
+            # create a list for RB and WR since there are multiple
+            if pos == 'RB' or pos == 'WR':
+                if pos not in results:
+                    results[pos] = []
+                # append to RB/WR list
+                results[pos].append({
+                    'name': name,
+                    'pts': pts,
+                    'value': value
+                })
+            else:
+                # set QB, TE, FLEX, DST, S-FLEX
+                results[pos] = {
+                    'name': name,
+                    'pts': pts,
+                    'value': value
+                }
+
     print(results)
     return results
 
@@ -578,25 +613,6 @@ def write_NBA_lineup(lineup, bro):
     return values
 
 
-def write_CFB_lineup(lineup):
-    values = []
-    for k, bro in lineup.items():
-        values = [
-            [k, '', 'PMR', bro['pmr']],
-            ['Position', 'Player', 'Points', 'Value'],
-            ['QB', bro['QB']['name'], bro['QB']['pts'], bro['QB']['value']],
-            ['RB', bro['SG']['name'], bro['SG']['pts'], bro['SG']['value']],
-            ['RB', bro['SF']['name'], bro['SF']['pts'], bro['SF']['value']],
-            ['WR', bro['PF']['name'], bro['PF']['pts'], bro['PF']['value']],
-            ['WR', bro['C']['name'], bro['C']['pts'], bro['C']['value']],
-            ['WR', bro['G']['name'], bro['G']['pts'], bro['G']['value']],
-            ['FLEX', bro['F']['name'], bro['F']['pts'], bro['F']['value']],
-            ['SFLEX', bro['UTIL']['name'], bro['UTIL']['pts'], bro['UTIL']['value']],
-            ['', '', bro['points']]
-        ]
-    return values
-
-
 def write_PGA_lineup(lineup, bro):
     values = [
         [bro, '', 'PMR', lineup['pmr']],
@@ -609,12 +625,60 @@ def write_PGA_lineup(lineup, bro):
     return values
 
 
+def write_NFL_lineup(lineup, bro):
+    values = [
+        [bro, '', 'PMR', lineup['pmr']],
+        ['Position', 'Player', 'Points', 'Value']
+    ]
+    # append QB
+    values.append(['QB', lineup['QB']['name'], lineup['QB']
+                   ['pts'], lineup['QB']['value']])
+
+    # append RBs
+    for RB in lineup['RB']:
+        values.append(['RB', RB['name'], RB['pts'], RB['value']])
+
+    # append WRs
+    for WR in lineup['WR']:
+        values.append(['WR', WR['name'], WR['pts'], WR['value']])
+
+    # append the other positions
+    for pos in ['TE', 'FLEX', 'DST']:
+        values.append([pos, lineup[pos]['name'],
+                       lineup[pos]['pts'], lineup[pos]['value']])
+
+    values.append(['rank', lineup['rank'], lineup['points'], ''])
+    return values
+
+
+def write_CFB_lineup(lineup, bro):
+    values = [
+        [bro, '', 'PMR', lineup['pmr']],
+        ['Position', 'Player', 'Points', 'Value']
+    ]
+    # append QB
+    values.append(['QB', lineup['QB']['name'], lineup['QB']
+                   ['pts'], lineup['QB']['value']])
+    # append RBs
+    for RB in lineup['RB']:
+        values.append(['RB', RB['name'], RB['pts'], RB['value']])
+    # append WRs
+    for WR in lineup['WR']:
+        values.append(['WR', WR['name'], WR['pts'], WR['value']])
+
+    for pos in ['FLEX', 'S-FLEX']:
+        values.append([pos, lineup[pos]['name'],
+                       lineup[pos]['pts'], lineup[pos]['value']])
+    # append rank and points
+    values.append(['rank', lineup['rank'], lineup['points'], ''])
+    return values
+
+
 def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
-    if sport not in ['NBA', 'PGA']:
-        return
 
     print("Sport == {} - trying to write_lineup()..".format(sport))
 
+    # pre-defined google sheet lineup ranges
     # range 1 K3:N15  range 4: P3:S15
     # range 2 K15:N25 range 5: P15:S25
     # range 3 K27:N37 range 6: P27:S37
@@ -627,6 +691,15 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
         "{}!P27:S37".format(sport)
     ]
 
+    NFL_ranges = [
+        "{}!K3:N15".format(sport),
+        "{}!K16:N27".format(sport),
+        "{}!K29:N40".format(sport),
+        "{}!P3:S15".format(sport),
+        "{}!P16:S27".format(sport),
+        "{}!P29:S40".format(sport)
+    ]
+
     # print(lineup)
     if sport == 'NBA':
         for i, (k, v) in enumerate(lineup.items()):
@@ -634,21 +707,26 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
             values = write_NBA_lineup(v, k)
             print("trying to write line [{}] to {}".format(k, ranges[i]))
             write_row(service, spreadsheet_id, ranges[i], values)
-
-    elif sport == 'CFB':
-        values = write_CFB_lineup(lineup)
     elif sport == 'PGA':
         for i, (k, v) in enumerate(lineup.items()):
             # print("i: {} K: {}\nv:{}".format(i, k, v))
             values = write_PGA_lineup(v, k)
             print("trying to write line [{}] to {}".format(k, ranges[i]))
             write_row(service, spreadsheet_id, ranges[i], values)
-
-    # values = [
-    #     ['Last Updated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
-    # ]
-
-    # write_row(service, spreadsheet_id, RANGE_NAME, values)
+    elif sport == 'NFL':
+        for i, (k, v) in enumerate(lineup.items()):
+            # print("i: {} K: {}\nv:{}".format(i, k, v))
+            values = write_NFL_lineup(v, k)
+            print("trying to write line [{}] to {}".format(k, NFL_ranges[i]))
+            # print(values)
+            write_row(service, spreadsheet_id, NFL_ranges[i], values)
+    elif sport == 'CFB':
+        for i, (k, v) in enumerate(lineup.items()):
+            # print("i: {} K: {}\nv:{}".format(i, k, v))
+            values = write_CFB_lineup(v, k)
+            print("trying to write line [{}] to {}".format(k, ranges[i]))
+            # print(values)
+            write_row(service, spreadsheet_id, ranges[i], values)
 
 
 def read_salary_csv(fn):

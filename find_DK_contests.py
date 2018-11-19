@@ -155,7 +155,7 @@ def main():
         # print(filename)
         print(csv_url)
 
-        # pull_soup_data(filename, csv_url, ignore_file=True)
+        pull_soup_data(filename, csv_url, ignore_file=True)
     else:
         contests = pull_dk_contests()
 
