@@ -537,6 +537,14 @@ def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
         end_indices = [indices[i] for i in range(1, len(indices))]
         # append size of splt as last index
         end_indices.append(len(splt))
+    elif sport == 'NHL':
+        positions = ['C', 'W', 'D', 'G', 'UTIL']
+        # list comp for indicies of positions in splt
+        indices = [i for i, pos in enumerate(splt) if pos in positions]
+        # list comp for ending indices in splt. for splicing, the second argument is exclusive
+        end_indices = [indices[i] for i in range(1, len(indices))]
+        # append size of splt as last index
+        end_indices.append(len(splt))
 
     pts = 0
     value = 0
@@ -589,6 +597,24 @@ def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
                 })
             else:
                 # set QB, TE, FLEX, DST, S-FLEX
+                results[pos] = {
+                    'name': name,
+                    'pts': pts,
+                    'value': value
+                }
+        elif sport == 'NHL':
+            # create a list for C/W/D since there are multiple
+            if pos == 'C' or pos == 'W' or pos == 'D':
+                if pos not in results:
+                    results[pos] = []
+                # append to RB/WR list
+                results[pos].append({
+                    'name': name,
+                    'pts': pts,
+                    'value': value
+                })
+            else:
+                # set G/UTIL
                 results[pos] = {
                     'name': name,
                     'pts': pts,
@@ -674,6 +700,29 @@ def write_CFB_lineup(lineup, bro):
     return values
 
 
+def write_NHL_lineup(lineup, bro):
+    values = [
+        [bro, '', 'PMR', lineup['pmr']],
+        ['Position', 'Player', 'Points', 'Value']
+    ]
+    # append C
+    for C in lineup['C']:
+        values.append(['C', C['name'], C['pts'], C['value']])
+    # append W
+    for W in lineup['W']:
+        values.append(['W', W['name'], W['pts'], W['value']])
+    # append D
+    for D in lineup['D']:
+        values.append(['D', D['name'], D['pts'], D['value']])
+    # append G/UTIL
+    for pos in ['G', 'UTIL']:
+        values.append([pos, lineup[pos]['name'],
+                       lineup[pos]['pts'], lineup[pos]['value']])
+    # append rank and points
+    values.append(['rank', lineup['rank'], lineup['points'], ''])
+    return values
+
+
 def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
 
     print("Sport == {} - trying to write_lineup()..".format(sport))
@@ -727,6 +776,13 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
             print("trying to write line [{}] to {}".format(k, ranges[i]))
             # print(values)
             write_row(service, spreadsheet_id, ranges[i], values)
+    elif sport == 'NHL':
+        for i, (k, v) in enumerate(lineup.items()):
+            # print("i: {} K: {}\nv:{}".format(i, k, v))
+            values = write_NHL_lineup(v, k)
+            print("trying to write line [{}] to {}".format(k, NFL_ranges[i]))
+            # print(values)
+            write_row(service, spreadsheet_id, NFL_ranges[i], values)
 
 
 def read_salary_csv(fn):
@@ -757,26 +813,24 @@ def massage_name(name):
     if 'Guillermo Hernan' in name:
         name = 'Guillermo Hernangomez'
     if 'Juancho Hernan' in name:
-        print("Found Juancho!")
         name = 'Juancho Hernangomez'
     if 'lex Abrines' in name:
         name = 'Alex Abrines'
+    if 'Luwawu-Cabarrot' in name:
+        name = 'Timothe Luwawu-Cabarrot'
     return name
 
 
 def main():
     """Use contest ID to update Google Sheet with DFS results."""
-    # 63149608
-    # pull_dk_contests()
-    # exit()
 
     # parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--id', type=int, required=True,
                         help='Contest ID from DraftKings',)
     parser.add_argument('-c', '--csv', required=True, help='Slate CSV from DraftKings',)
-    parser.add_argument('-s', '--sport', choices=['NBA', 'NFL', 'CFB', 'PGA'],
-                        required=True, help='Type of contest (NBA, NFL, PGA, or CFB)')
+    parser.add_argument('-s', '--sport', choices=['NBA', 'NFL', 'CFB', 'PGA', 'NHL'],
+                        required=True, help='Type of contest (NBA, NFL, PGA, CFB, or NHL)')
     parser.add_argument('-v', '--verbose', help='Increase verbosity')
     args = parser.parse_args()
 

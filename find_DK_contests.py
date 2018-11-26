@@ -143,7 +143,7 @@ def main():
     # parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '-s', '--sport', choices=['NBA', 'NFL', 'CFB', 'PGA'], help='Type of contest (NBA, NFL, PGA, or CFB)')
+        '-s', '--sport', choices=['NBA', 'NFL', 'CFB', 'PGA', 'NHL'], help='Type of contest (NBA, NFL, PGA, CFB, or NHL)')
     args = parser.parse_args()
 
     if args.sport:
