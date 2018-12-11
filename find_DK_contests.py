@@ -139,7 +139,6 @@ def get_sport_day(sport, contests):
 
 
 def main():
-
     # parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument(

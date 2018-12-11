@@ -563,9 +563,11 @@ def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
             if name in player_dict:
                 pts = player_dict[name]['pts']
                 value = player_dict[name]['value']
+                perc = player_dict[name]['perc']
             else:
                 pts = None
                 value = None
+                perc = None
 
         if sport == 'NBA':
             results[pos] = {
