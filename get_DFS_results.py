@@ -477,7 +477,7 @@ def find_sheet_id(service, spreadsheet_id, title):
 
 def get_matchup_info(game_info, team_abbv):
     # wth is this?
-    if game_info in ['In Progress', 'Final']:
+    if game_info in ['In Progress', 'Final', 'UNKNOWN']:
         return game_info
 
     # split game info into matchup_info
@@ -490,19 +490,20 @@ def get_matchup_info(game_info, team_abbv):
 
 
 def get_game_time_info(game_info):
-    if game_info in ['In Progress', 'Final']:
+    if game_info in ['In Progress', 'Final', 'UNKNOWN']:
         return game_info
     return game_info.split(' ', 1)[1]
 
 
-def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
+def parse_lineup(sport, lineup, points, pmr, rank, perc, player_dict):
 
     splt = lineup.split(' ')
 
     results = {
         'rank': rank,
         'pmr': pmr,
-        'points': points
+        'points': points,
+        'perc': perc
     }
 
     if sport == 'NBA':
@@ -565,15 +566,17 @@ def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
                 value = player_dict[name]['value']
                 perc = player_dict[name]['perc']
             else:
-                pts = None
-                value = None
-                perc = None
+                print("Player not found in player_dict (LOCKED?)")
+                pts = ''
+                value = ''
+                perc = ''
 
         if sport == 'NBA':
             results[pos] = {
                 'name': name,
                 'pts': pts,
-                'value': value
+                'value': value,
+                'perc': perc
             }
         elif sport == 'PGA':
             # because PGA has all 'G', create a list rather than a dictionary
@@ -631,11 +634,12 @@ def write_NBA_lineup(lineup, bro):
     ordered_position = ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'UTIL']
     values = [
         [bro, '', 'PMR', lineup['pmr']],
-        ['Position', 'Player', 'Points', 'Value']
+        ['Position', 'Player', 'Points', 'Value', 'Own']
     ]
     for position in ordered_position:
         values.append([position, lineup[position]['name'],
-                       lineup[position]['pts'], lineup[position]['value']])
+                       lineup[position]['pts'], lineup[position]['value'],
+                       lineup[position]['perc']])
 
     values.append(['rank', lineup['rank'], lineup['points'], ''])
     return values
@@ -734,12 +738,14 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
     # range 2 K15:N25 range 5: P15:S25
     # range 3 K27:N37 range 6: P27:S37
     ranges = [
-        "{}!K3:N15".format(sport),
-        "{}!K15:N25".format(sport),
-        "{}!K27:N37".format(sport),
-        "{}!P3:S15".format(sport),
-        "{}!P15:S25".format(sport),
-        "{}!P27:S37".format(sport)
+        "{}!K3:O15".format(sport),
+        "{}!K15:O25".format(sport),
+        "{}!K27:O37".format(sport),
+        "{}!K39:O49".format(sport),
+        "{}!Q3:U15".format(sport),
+        "{}!Q15:U25".format(sport),
+        "{}!Q27:U37".format(sport),
+        "{}!Q39:U49".format(sport)
     ]
 
     NFL_ranges = [
@@ -753,7 +759,7 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
 
     # print(lineup)
     if sport == 'NBA':
-        for i, (k, v) in enumerate(lineup.items()):
+        for i, (k, v) in enumerate(sorted(lineup.items())):
             # print("i: {} K: {}\nv:{}".format(i, k, v))
             values = write_NBA_lineup(v, k)
             print("trying to write line [{}] to {}".format(k, ranges[i]))
@@ -820,6 +826,8 @@ def massage_name(name):
         name = 'Alex Abrines'
     if 'Luwawu-Cabarrot' in name:
         name = 'Timothe Luwawu-Cabarrot'
+    if ' Calder' in name:
+        name = 'Jose Calderon'
     return name
 
 
@@ -869,7 +877,7 @@ def main():
     parsed_lineup = {}
     # values = interate_contest_list(contest_list, salary_dict, args.sport)
     bros = ['aplewandowski', 'FlyntCoal', 'Cubbiesftw23',
-            'Mcoleman1902', 'cglenn91', 'Notorious']
+            'Mcoleman1902', 'cglenn91', 'Notorious', 'Bra3105', 'ChipotleAddict']
     values = []
     sport = args.sport
     bro_lineups = {}
@@ -887,7 +895,8 @@ def main():
                 'rank': rank,
                 'lineup': lineup,
                 'pmr': pmr,
-                'points': points
+                'points': points,
+                'perc': perc
             }
 
         stats = row[7:]
@@ -938,7 +947,7 @@ def main():
 
     for bro, v in bro_lineups.items():
         parsed_lineup[bro] = parse_lineup(
-            sport, v['lineup'], v['points'], v['pmr'], v['rank'], player_dict)
+            sport, v['lineup'], v['points'], v['pmr'], v['rank'], v['perc'], player_dict)
 
     # Call the Sheets API
     spreadsheet_id = '1Jv5nT-yUoEarkzY5wa7RW0_y0Dqoj8_zDrjeDs-pHL4'
