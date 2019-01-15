@@ -495,15 +495,14 @@ def get_game_time_info(game_info):
     return game_info.split(' ', 1)[1]
 
 
-def parse_lineup(sport, lineup, points, pmr, rank, perc, player_dict):
+def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
 
     splt = lineup.split(' ')
 
     results = {
         'rank': rank,
         'pmr': pmr,
-        'points': points,
-        'perc': perc
+        'points': points
     }
 
     if sport == 'NBA':
@@ -566,7 +565,6 @@ def parse_lineup(sport, lineup, points, pmr, rank, perc, player_dict):
                 value = player_dict[name]['value']
                 perc = player_dict[name]['perc']
             else:
-                print("Player not found in player_dict (LOCKED?)")
                 pts = ''
                 value = ''
                 perc = ''
@@ -587,7 +585,8 @@ def parse_lineup(sport, lineup, points, pmr, rank, perc, player_dict):
             results[pos].append({
                 'name': name,
                 'pts': pts,
-                'value': value
+                'value': value,
+                'perc': perc
             })
         elif sport == 'NFL' or sport == 'CFB':
             # create a list for RB and WR since there are multiple
@@ -598,14 +597,16 @@ def parse_lineup(sport, lineup, points, pmr, rank, perc, player_dict):
                 results[pos].append({
                     'name': name,
                     'pts': pts,
-                    'value': value
+                    'value': value,
+                    'perc': perc
                 })
             else:
                 # set QB, TE, FLEX, DST, S-FLEX
                 results[pos] = {
                     'name': name,
                     'pts': pts,
-                    'value': value
+                    'value': value,
+                    'perc': perc
                 }
         elif sport == 'NHL':
             # create a list for C/W/D since there are multiple
@@ -616,14 +617,16 @@ def parse_lineup(sport, lineup, points, pmr, rank, perc, player_dict):
                 results[pos].append({
                     'name': name,
                     'pts': pts,
-                    'value': value
+                    'value': value,
+                    'perc': perc
                 })
             else:
                 # set G/UTIL
                 results[pos] = {
                     'name': name,
                     'pts': pts,
-                    'value': value
+                    'value': value,
+                    'perc': perc
                 }
 
     print(results)
@@ -633,7 +636,7 @@ def parse_lineup(sport, lineup, points, pmr, rank, perc, player_dict):
 def write_NBA_lineup(lineup, bro):
     ordered_position = ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'UTIL']
     values = [
-        [bro, '', 'PMR', lineup['pmr']],
+        [bro, '', 'PMR', lineup['pmr'], ''],
         ['Position', 'Player', 'Points', 'Value', 'Own']
     ]
     for position in ordered_position:
@@ -641,17 +644,18 @@ def write_NBA_lineup(lineup, bro):
                        lineup[position]['pts'], lineup[position]['value'],
                        lineup[position]['perc']])
 
-    values.append(['rank', lineup['rank'], lineup['points'], ''])
+    values.append(['rank', lineup['rank'], lineup['points'], '', ''])
     return values
 
 
 def write_PGA_lineup(lineup, bro):
     values = [
         [bro, '', 'PMR', lineup['pmr']],
-        ['Position', 'Player', 'Points', 'Value']
+        ['Position', 'Player', 'Points', 'Value', 'Own']
     ]
     for golfer in lineup['G']:
-        values.append(['G', golfer['name'], golfer['pts'], golfer['value']])
+        values.append(['G', golfer['name'], golfer['pts'],
+                       golfer['value'], golfer['perc']])
 
     values.append(['rank', lineup['rank'], lineup['points'], ''])
     return values
@@ -664,20 +668,22 @@ def write_NFL_lineup(lineup, bro):
     ]
     # append QB
     values.append(['QB', lineup['QB']['name'], lineup['QB']
-                   ['pts'], lineup['QB']['value']])
+                   ['pts'], lineup['QB']['value'],
+                   lineup['QB']['perc']])
 
     # append RBs
     for RB in lineup['RB']:
-        values.append(['RB', RB['name'], RB['pts'], RB['value']])
+        values.append(['RB', RB['name'], RB['pts'], RB['value'], RB['perc']])
 
     # append WRs
     for WR in lineup['WR']:
-        values.append(['WR', WR['name'], WR['pts'], WR['value']])
+        values.append(['WR', WR['name'], WR['pts'], WR['value'], WR['perc']])
 
     # append the other positions
     for pos in ['TE', 'FLEX', 'DST']:
         values.append([pos, lineup[pos]['name'],
-                       lineup[pos]['pts'], lineup[pos]['value']])
+                       lineup[pos]['pts'], lineup[pos]['value'],
+                       lineup[pos]['perc']])
 
     values.append(['rank', lineup['rank'], lineup['points'], ''])
     return values
@@ -730,13 +736,12 @@ def write_NHL_lineup(lineup, bro):
 
 
 def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
-
     print("Sport == {} - trying to write_lineup()..".format(sport))
-
     # pre-defined google sheet lineup ranges
-    # range 1 K3:N15  range 4: P3:S15
-    # range 2 K15:N25 range 5: P15:S25
-    # range 3 K27:N37 range 6: P27:S37
+    # range 1 K3:N15  range 5: Q3:U15
+    # range 2 K15:N25 range 6: Q15:U25
+    # range 3 K27:N37 range 7: Q27:U37
+    # range 4 K39:O49 range 8: Q39:U49
     ranges = [
         "{}!K3:O15".format(sport),
         "{}!K15:O25".format(sport),
@@ -747,45 +752,56 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
         "{}!Q27:U37".format(sport),
         "{}!Q39:U49".format(sport)
     ]
-
+    # NFL has an extra position, so it needs new ranges
     NFL_ranges = [
-        "{}!K3:N15".format(sport),
-        "{}!K16:N27".format(sport),
-        "{}!K29:N40".format(sport),
-        "{}!P3:S15".format(sport),
-        "{}!P16:S27".format(sport),
-        "{}!P29:S40".format(sport)
+        "{}!K3:O15".format(sport),
+        "{}!K16:O27".format(sport),
+        "{}!K29:O40".format(sport),
+        "{}!K42:O53".format(sport),
+        "{}!Q3:U15".format(sport),
+        "{}!Q16:U27".format(sport),
+        "{}!Q29:U40".format(sport),
+        "{}!Q42:U53".format(sport)
     ]
 
-    # print(lineup)
+    ultimate_list = []
     if sport == 'NBA':
         for i, (k, v) in enumerate(sorted(lineup.items())):
             # print("i: {} K: {}\nv:{}".format(i, k, v))
             values = write_NBA_lineup(v, k)
-            print("trying to write line [{}] to {}".format(k, ranges[i]))
-            write_row(service, spreadsheet_id, ranges[i], values)
+            for j, z in enumerate(values):
+                if i in [0, 1, 2, 3]:
+                    ultimate_list.append(z)
+                elif i in [4, 5, 6, 7]:
+                    mod = (i % 4) + ((i % 4) * 11) + j
+                    ultimate_list[mod].extend([''] + z)
+            # append an empty list for spacing
+            ultimate_list.append([])
+        r = "{}!K3:U54".format(sport)
+        print("trying to write all lineups to [{}]".format(r))
+        write_row(service, spreadsheet_id, r, ultimate_list)
     elif sport == 'PGA':
-        for i, (k, v) in enumerate(lineup.items()):
+        for i, (k, v) in enumerate(sorted(lineup.items())):
             # print("i: {} K: {}\nv:{}".format(i, k, v))
             values = write_PGA_lineup(v, k)
             print("trying to write line [{}] to {}".format(k, ranges[i]))
             write_row(service, spreadsheet_id, ranges[i], values)
     elif sport == 'NFL':
-        for i, (k, v) in enumerate(lineup.items()):
+        for i, (k, v) in enumerate(sorted(lineup.items())):
             # print("i: {} K: {}\nv:{}".format(i, k, v))
             values = write_NFL_lineup(v, k)
             print("trying to write line [{}] to {}".format(k, NFL_ranges[i]))
             # print(values)
             write_row(service, spreadsheet_id, NFL_ranges[i], values)
     elif sport == 'CFB':
-        for i, (k, v) in enumerate(lineup.items()):
+        for i, (k, v) in enumerate(sorted(lineup.items())):
             # print("i: {} K: {}\nv:{}".format(i, k, v))
             values = write_CFB_lineup(v, k)
             print("trying to write line [{}] to {}".format(k, ranges[i]))
             # print(values)
             write_row(service, spreadsheet_id, ranges[i], values)
     elif sport == 'NHL':
-        for i, (k, v) in enumerate(lineup.items()):
+        for i, (k, v) in enumerate(sorted(lineup.items())):
             # print("i: {} K: {}\nv:{}".format(i, k, v))
             values = write_NHL_lineup(v, k)
             print("trying to write line [{}] to {}".format(k, NFL_ranges[i]))
@@ -896,7 +912,7 @@ def main():
                 'lineup': lineup,
                 'pmr': pmr,
                 'points': points,
-                'perc': perc
+                # 'perc': perc
             }
 
         stats = row[7:]
@@ -947,7 +963,7 @@ def main():
 
     for bro, v in bro_lineups.items():
         parsed_lineup[bro] = parse_lineup(
-            sport, v['lineup'], v['points'], v['pmr'], v['rank'], v['perc'], player_dict)
+            sport, v['lineup'], v['points'], v['pmr'], v['rank'], player_dict)
 
     # Call the Sheets API
     spreadsheet_id = '1Jv5nT-yUoEarkzY5wa7RW0_y0Dqoj8_zDrjeDs-pHL4'
