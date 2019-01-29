@@ -13,5 +13,6 @@ gspread = "*"
 "bs4" = "*"
 "html5lib" = "*"
 python-dateutil = "*"
+pytz = "*"
 
 [dev-packages]

@@ -83,7 +83,7 @@ def pull_dk_contests(sport=None, reload=False):
         now = datetime.now()
         # iterate through json
         for contest in contest_json:
-#            print(contest)
+            # print(contest)
             id = contest['ContestId']
             name = contest['ContestName']
             buyin = contest['BuyInAmount']
@@ -117,8 +117,8 @@ def pull_dk_contests(sport=None, reload=False):
             if sport is None or sport in name:
                 # print("\n\n{}\n\n".format(contest))
                 # print("-----------------------------")
-                print("ID: {} [{}] buy in: {} payout: {} start_date_edt: {} [starts in: {}] group_id: {} game_type: {}".format(
-                    id, name, buyin, top_payout, start_date_edt, time_until, group_id, game_type))
+                print("ID: {} [{}]  buy in: {} payout: {} start_date_edt: {} [starts in: {}] group_id: {} game_type: {} pts_thresh: {}".format(
+                    id, name, buyin, top_payout, start_date_edt, time_until, group_id, game_type, pts_thresh))
                 # print("https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId={}&draftGroupId={}".format(game_type, group_id))
     return contest_dict
 
@@ -155,7 +155,8 @@ def main():
         csv_url = get_csv_url(args.sport, contests)
         day = get_sport_day(args.sport, contests)
         print(day)
-        filename = "/home/pi/Desktop/dk_salary_owner/DKSalaries_{0}_{1}.csv".format(args.sport, day)
+        filename = "/home/pi/Desktop/dk_salary_owner/DKSalaries_{0}_{1}.csv".format(
+            args.sport, day)
         # print(filename)
         print(csv_url)
 
