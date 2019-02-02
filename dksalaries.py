@@ -34,6 +34,7 @@ Response format: {
 """
 
 from csv import reader, writer
+import argparse
 import datetime
 import os
 import re
@@ -233,9 +234,14 @@ def get_largest_contest(contests, entry_fee):
     print("get_largest_contest(contests, {})".format(entry_fee))
     print(type(contests))
     print("contests size: {}".format(len(contests)))
-    return sorted([c for c in contests if c['a'] == entry_fee],
-                  key=lambda x: x['m'],
-                  reverse=True)[0]
+    sorted_list = sorted([c for c in contests if c['a'] == entry_fee],
+                         key=lambda x: x['m'],
+                         reverse=True)
+
+    if sorted_list:
+        return sorted_list[0]
+    else:
+        return None
 
 
 def get_contests_by_entries(contests, entry_fee, limit):
@@ -247,9 +253,24 @@ def get_contests_by_entries(contests, entry_fee, limit):
 
 def main():
     """"""
+    # parse arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '-s', '--sport', choices=['NBA', 'NFL', 'CFB', 'GOLF', 'NHL'],
+        required=True, help='Type of contest (NBA, NFL, GOLF, CFB, or NHL)')
+    parser.add_argument(
+        '-l', '--live', action='store_true', help='Get live contests')
+    args = parser.parse_args()
+
+    live = ''
+    print(args)
+    if args.live:
+        print("args.live is true")
+        live = 'live'
+
     # set cookies based on Chrome session
     COOKIES = browsercookie.chrome()
-    URL = 'https://www.draftkings.com/lobby/getcontests?sport=NBA'
+    URL = "https://www.draftkings.com/lobby/get{0}contests?sport={1}".format(live, args.sport)
     HEADERS = {
         'Accept': '*/*',
         'Accept-Encoding': 'gzip, deflate, sdch',
@@ -297,21 +318,15 @@ def main():
         print("date_time: {}".format(date_time))
         print("dt: {}".format(dt))
         print("contest id: {}".format(contest['id']))
-        print("contest id: {}".format(contest['dg']))
+        print("draft group: {}".format(contest['dg']))
         print("date: {}".format(date_time.date()))
         print("sd: {}".format(contest['sd']))
         print("total_prizes: {}".format(contest['po']))
         print("entries: {}".format(contest['m']))
         print("entry_fee: {}".format(contest['a']))
         print("")
-        # DKContest.objects.update_or_create(dk_id=contest['id'], defaults={
-        #     'date': date_time.date(),
-        #     'datetime': date_time,
-        #     'name': contest['n'],
-        #     'total_prizes': contest['po'],
-        #     'entries': contest['m'],
-        #     'entry_fee': contest['a']
-        # })
+
+        print("")
 
 
 if __name__ == '__main__':
