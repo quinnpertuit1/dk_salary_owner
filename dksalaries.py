@@ -230,18 +230,29 @@ def get_dt_from_timestamp(timestamp_str):
     return datetime.datetime.fromtimestamp(timestamp / 1000)
 
 
-def get_largest_contest(contests, entry_fee):
+def get_largest_contest(contests, entry_fee, query=None, dt=datetime.datetime.today()):
     print("get_largest_contest(contests, {})".format(entry_fee))
     print(type(contests))
     print("contests size: {}".format(len(contests)))
-    sorted_list = sorted([c for c in contests if c['a'] == entry_fee],
-                         key=lambda x: x['m'],
-                         reverse=True)
+    ls = []
+    for c in contests:
+        ts = get_dt_from_timestamp(c['sd'])
+        if ts.date() == dt.date():
+            if c['a'] == entry_fee:
+                if query:
+                    if query in c['n']:
+                        ls.append(c)
+                else:
+                    ls.append(c)
 
+    # sort contests by # of entries
+    sorted_list = sorted(ls, key=lambda x: x['m'], reverse=True)
+
+    # if there is a sorted list, return the
     if sorted_list:
         return sorted_list[0]
-    else:
-        return None
+
+    return None
 
 
 def get_contests_by_entries(contests, entry_fee, limit):
@@ -260,6 +271,8 @@ def main():
         required=True, help='Type of contest (NBA, NFL, GOLF, CFB, or NHL)')
     parser.add_argument(
         '-l', '--live', action='store_true', help='Get live contests')
+    parser.add_argument(
+        '-q', '--query', help='Search contest name')
     args = parser.parse_args()
 
     live = ''
@@ -268,9 +281,20 @@ def main():
         print("args.live is true")
         live = 'live'
 
+    # set query if there is an argument
+    query = None
+    if args.query:
+        query = args.query
+
+    today = datetime.datetime.today()
+    weekday = today.strftime('%A')
+    monthday = today.strftime('%d')
+    month = today.strftime('%m')
+
     # set cookies based on Chrome session
     COOKIES = browsercookie.chrome()
-    URL = "https://www.draftkings.com/lobby/get{0}contests?sport={1}".format(live, args.sport)
+    URL = "https://www.draftkings.com/lobby/get{0}contests?sport={1}".format(
+        live, args.sport)
     HEADERS = {
         'Accept': '*/*',
         'Accept-Encoding': 'gzip, deflate, sdch',
@@ -303,15 +327,17 @@ def main():
     #     get_largest_contest(response_contests, 0.25),
     #     get_largest_contest(response_contests, 27)
     # ] + get_contests_by_entries(response_contests, 3, 50000)
+
     contests = [
-        get_largest_contest(response_contests, 3),
-        get_largest_contest(response_contests, 0.25),
-        get_largest_contest(response_contests, 25)
+        get_largest_contest(response_contests, 3, query),
+        get_largest_contest(response_contests, 0.25, query),
+        get_largest_contest(response_contests, 25, query)
     ]
+
     for contest in contests:
-        print("---------------")
-        print(contest)
-        print("---------------")
+        # print("---------------")
+        # print(contest)
+        # print("---------------")
         date_time = get_pst_from_timestamp(contest['sd'])
         dt = get_dt_from_timestamp(contest['sd'])
         print("name: {}".format(contest['n']))
@@ -326,7 +352,11 @@ def main():
         print("entry_fee: {}".format(contest['a']))
         print("")
 
-        print("")
+        # print cron jobs
+        print("*/10 0-1,19-23 {0}-{1:02d} {2} * cd /home/pi/Desktop/dk_salary_owner/ && /usr/local/bin/pipenv run python download_DK_salary.py -s {3} -dg {4} -f DKSalaries_{3}_{5}.csv >> /home/pi/Desktop/test.log 2>&1".format(
+            monthday, int(monthday) + 1, month, args.sport, contest['dg'], weekday))
+        print("*/5 0-1,19-23 {0}-{1:02d} {2} * cd /home/pi/Desktop/dk_salary_owner/ && /usr/local/bin/pipenv run python get_DFS_results.py -s {3} -i {4} -c DKSalaries_{3}_{5}.csv >> /home/pi/Desktop/NBA_results.log 2>&1".format(
+            monthday, int(monthday) + 1, month, args.sport, contest['id'], weekday))
 
 
 if __name__ == '__main__':
