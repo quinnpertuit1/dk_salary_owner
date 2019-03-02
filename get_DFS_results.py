@@ -3,18 +3,18 @@ import argparse
 import csv
 import io
 import json
-import re
 import requests
 # from unidecode import unidecode
 import unicodedata
 import zipfile
-from os import path, sep
-from dateutil import parser
+from os import path
 # from datetime import datetime
 import datetime
 
-from bs4 import BeautifulSoup
-import browsercookie
+from http.cookiejar import CookieJar
+# from pprint import pprint
+# from bs4 import BeautifulSoup
+# import browsercookie
 
 from googleapiclient.discovery import build
 from httplib2 import Http
@@ -42,11 +42,14 @@ from oauth2client import file, client, tools
 
 
 class EST5EDT(datetime.tzinfo):
+    """Create pz timezone for EST/EDT."""
 
     def utcoffset(self, dt):
+        """Set UTC offset."""
         return datetime.timedelta(hours=-5) + self.dst(dt)
 
     def dst(self, dt):
+        """Determine if DST is necessary depending on dates."""
         d = datetime.datetime(dt.year, 3, 8)  # 2nd Sunday in March
         self.dston = d + datetime.timedelta(days=6-d.weekday())
         d = datetime.datetime(dt.year, 11, 1)  # 1st Sunday in Nov
@@ -57,92 +60,98 @@ class EST5EDT(datetime.tzinfo):
             return datetime.timedelta(0)
 
     def tzname(self, dt):
+        """Return name of timezone."""
         return 'EST5EDT'
 
 
 def strip_accents(s):
+    """Strip accents from a given string and replace with letters without accents."""
     return ''.join(c for c in unicodedata.normalize('NFD', s)
                    if unicodedata.category(c) != 'Mn')
 
 
-def pull_dk_contests(reload=False):
-    ENDPOINT = 'https://www.draftkings.com/mycontests'
-    filename = 'my_contests.html'
+# def pull_dk_contests(reload=False):
+#     ENDPOINT = 'https://www.draftkings.com/mycontests'
+#     filename = 'my_contests.html'
+#
+#     # pull data
+#     soup = pull_soup_data(filename, ENDPOINT)
+#
+#     # find script(s) in the html
+#     script = soup.findAll('script')
+#
+#     # for i, s in enumerate(script):
+#     #     print("{}: {}".format(i, s))
+#     js_contest_data = script[133].string
+#
+#     # pull json object from data variable
+#     # pattern = re.compile(r'data = (.*);')
+#     pattern = re.compile(r'upcoming: (.*),')
+#     json_str = pattern.search(js_contest_data).group(1)
+#     contest_json = json.loads(json_str)
+#
+#     bool_quarters = False
+#     now = datetime.datetime.now()
+#     # iterate through json
+#     for contest in contest_json:
+#         # print(contest)
+#         id = contest['ContestId']
+#         name = contest['ContestName']
+#         buyin = contest['BuyInAmount']
+#         est_starttime = contest['ContestStartDateEdt']
+#         top_payout = contest['TopPayout']
+#         group_id = contest['DraftGroupId']
+#         game_type = contest['GameTypeId']
+#
+#         # only print quarters contests ServiceAccountCredentials
+#         if buyin == 0.25:
+#             if bool_quarters:
+#                 continue
+#             else:
+#                 bool_quarters = True
+#
+#         dt_starttime = parser.parse(est_starttime)
+#         time_until = dt_starttime - now
+#
+#         print("ID: {} buyin: {} payout: {} est_startime: {} starts in: {} [{}]".format(
+#             id, buyin, top_payout, est_starttime, time_until, name))
+#         print("group_id: {} game_type: {}".format(group_id, game_type))
+#         print("https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId={}&draftGroupId={}".format(game_type, group_id))
 
-    # pull data
-    soup = pull_soup_data(filename, ENDPOINT)
 
-    # find script(s) in the html
-    script = soup.findAll('script')
-
-    # for i, s in enumerate(script):
-    #     print("{}: {}".format(i, s))
-    js_contest_data = script[133].string
-
-    # pull json object from data variable
-    # pattern = re.compile(r'data = (.*);')
-    pattern = re.compile(r'upcoming: (.*),')
-    json_str = pattern.search(js_contest_data).group(1)
-    contest_json = json.loads(json_str)
-
-    bool_quarters = False
-    now = datetime.datetime.now()
-    # iterate through json
-    for contest in contest_json:
-        # print(contest)
-        id = contest['ContestId']
-        name = contest['ContestName']
-        buyin = contest['BuyInAmount']
-        est_starttime = contest['ContestStartDateEdt']
-        top_payout = contest['TopPayout']
-        group_id = contest['DraftGroupId']
-        game_type = contest['GameTypeId']
-
-        # only print quarters contests ServiceAccountCredentials
-        if buyin == 0.25:
-            if bool_quarters:
-                continue
-            else:
-                bool_quarters = True
-
-        dt_starttime = parser.parse(est_starttime)
-        time_until = dt_starttime - now
-
-        print("ID: {} buyin: {} payout: {} est_startime: {} starts in: {} [{}]".format(
-            id, buyin, top_payout, est_starttime, time_until, name))
-        print("group_id: {} game_type: {}".format(group_id, game_type))
-        print("https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId={}&draftGroupId={}".format(game_type, group_id))
-
-
-def pull_soup_data(filename, ENDPOINT):
-    """Either pull file from html or from file."""
-    soup = None
-    if not path.isfile(filename):
-        print("{} does not exist. Pulling from endpoint [{}]".format(filename, ENDPOINT))
-
-        # set cookies based on Chrome session
-        cookies = browsercookie.chrome()
-
-        # send GET request
-        r = requests.get(ENDPOINT, cookies=cookies)
-        status = r.status_code
-
-        # if not successful, raise an exception
-        if status != 200:
-            raise Exception('Requests status != 200. It is: {0}'.format(status))
-
-        # dump html to file to avoid multiple requests
-        with open(filename, 'w') as outfile:
-            print(r.text, file=outfile)
-
-        soup = BeautifulSoup(r.text, 'html5lib')
-    else:
-        print("File exists [{}]. Nice!".format(filename))
-        # load html from file
-        with open(filename, 'r') as html_file:
-            soup = BeautifulSoup(html_file, 'html5lib')
-
-    return soup
+# def pull_soup_data(filename, ENDPOINT):
+#     """Either pull file from html or from file."""
+#     soup = None
+#     if not path.isfile(filename):
+#         print("{} does not exist. Pulling from endpoint [{}]".format(filename, ENDPOINT))
+#
+#         # set cookies based on Chrome session
+#         # cookies = browsercookie.chrome()
+#         with open('cookies.json') as f:
+#             cookies = json.loads(f)
+#
+#         pprint(cookies)
+#
+#         # send GET request
+#         r = requests.get(ENDPOINT, cookies=cookies)
+#         status = r.status_code
+#
+#         # if not successful, raise an exception
+#         if status != 200:
+#             raise Exception('Requests status != 200. It is: {0}'.format(status))
+#
+#         # dump html to file to avoid multiple requests
+#         with open(filename, 'w') as outfile:
+#             print(r.text, file=outfile)
+#
+#         soup = BeautifulSoup(r.text, 'html5lib')
+#     else:
+#         print("File exists [{}]. Nice!".format(filename))
+#         # load html from file
+#         with open(filename, 'r') as html_file:
+#             soup = BeautifulSoup(html_file, 'html5lib')
+#
+#     return soup
 
 
 def pull_salary_csv(filename, csv_url):
@@ -163,14 +172,19 @@ def pull_contest_zip(filename, contest_id):
     contest_csv_url = "https://www.draftkings.com/contest/exportfullstandingscsv/{0}".format(
         contest_id)
 
-    # ~/Library/Application Support/Google/Chrome/Default/Cookies
+    # cookies = browsercookie.chrome()
 
-    # Uses Chrome's default cookies filepath by default
-    # cookies = chrome_cookies(contest_csv_url, cookie_file='~/Library/Application Support/Google/Chrome/Default/Cookies')
-    cookies = browsercookie.chrome()
+    # create CookieJar to pass to requests from json file
+    jar = CookieJar()
+    with open('cookies.json') as f:
+        cookies = json.load(f)
+        for c in cookies:
+            cookie = requests.cookies.create_cookie(
+                name=c['name'], value=c['value'], domain=c['domain'], path=c['path'], secure=c['secure'])
+            jar.set_cookie(cookie)
 
     # retrieve exported contest csv
-    r = requests.get(contest_csv_url, cookies=cookies)
+    r = requests.get(contest_csv_url, cookies=jar)
 
     print(r.headers)
     # if headers say file is a CSV file
@@ -863,6 +877,7 @@ def read_salary_csv(fn):
 
 
 def massage_name(name):
+    """Manually remove accents from peoples' names."""
     # wtf is going on with these guys' names?
     if 'Exum' in name:
         name = 'Dante Exum'
@@ -881,7 +896,6 @@ def massage_name(name):
 
 def main():
     """Use contest ID to update Google Sheet with DFS results."""
-
     # parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--id', type=int, required=True,
@@ -952,14 +966,15 @@ def main():
             if all('' == s or s.isspace() for s in stats):
                 continue
 
-            name = massage_name(stats[0])
+            # name = massage_name(stats[0])
+            name = strip_accents(stats[0])
             pos = stats[1]
             salary = int(salary_dict[name]['salary'])
             if 'PGA' not in sport:
                 team_abbv = salary_dict[name]['team_abbv']
                 game_info = salary_dict[name]['game_info']
                 matchup_info = get_matchup_info(game_info, team_abbv)
-                game_time = get_game_time_info(game_info)
+                # game_time = get_game_time_info(game_info)
             else:
                 team_abbv = ''
                 matchup_info = ''

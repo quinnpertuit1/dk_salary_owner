@@ -352,6 +352,10 @@ def main():
         print("entry_fee: {}".format(contest['a']))
         print("")
 
+        # change GOLF back to PGA
+        if args.sport == 'GOLF':
+            args.sport = 'PGA'
+
         # print cron jobs
         print("*/10 0-1,19-23 {0}-{1:02d} {2} * cd /home/pi/Desktop/dk_salary_owner/ && /usr/local/bin/pipenv run python download_DK_salary.py -s {3} -dg {4} -f DKSalaries_{3}_{5}.csv >> /home/pi/Desktop/test.log 2>&1".format(
             monthday, int(monthday) + 1, month, args.sport, contest['dg'], weekday))
