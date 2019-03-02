@@ -4,11 +4,8 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-pycookiecheat = "*"
 requests = "*"
-pycrypto = "*"
 browsercookie = "*"
-"pywin32" = "*"
 google-api-python-client = "*"
 "oauth2client" = "*"
 gspread = "*"
@@ -16,8 +13,6 @@ gspread = "*"
 "bs4" = "*"
 "html5lib" = "*"
 python-dateutil = "*"
+pytz = "*"
 
 [dev-packages]
-
-[requires]
-python_version = "3.7"

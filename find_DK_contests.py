@@ -57,7 +57,7 @@ def pull_soup_data(filename, ENDPOINT, ignore_file=False):
 
 def pull_dk_contests(sport=None, reload=False):
     ENDPOINT = 'https://www.draftkings.com/mycontests'
-    filename = 'my_contests.html'
+    filename = '/home/pi/Desktop/dk_salary_owner/my_contests.html'
 
     # pull data
     soup = pull_soup_data(filename, ENDPOINT, ignore_file=True)
@@ -79,13 +79,16 @@ def pull_dk_contests(sport=None, reload=False):
         contest_json = json.loads(json_str)
 
         bool_quarters = False
-        now = datetime.utcnow()
+        #now = datetime.utcnow()
+        now = datetime.now()
         # iterate through json
         for contest in contest_json:
+            # print(contest)
             id = contest['ContestId']
             name = contest['ContestName']
             buyin = contest['BuyInAmount']
             start_date = contest['ContestStartDate']
+            start_date_edt = contest['ContestStartDateEdt']
             top_payout = contest['TopPayout']
             group_id = contest['DraftGroupId']
             game_type = contest['GameTypeId']
@@ -99,7 +102,7 @@ def pull_dk_contests(sport=None, reload=False):
                     bool_quarters = True
 
             # subtract timestamps to get time until
-            dt_start_date = parser.parse(start_date, ignoretz=True)
+            dt_start_date = parser.parse(start_date_edt, ignoretz=True)
             time_until = dt_start_date - now
 
             contest_dict[id] = {
@@ -112,19 +115,16 @@ def pull_dk_contests(sport=None, reload=False):
 
             # only print if sport is in the name (or default None)
             if sport is None or sport in name:
-                print("\n\n{}\n\n".format(contest))
-                print("-----------------------------")
-                print("ID: {} [{}]".format(id, name))
-                print("buy in: {} payout: {}".format(buyin, top_payout))
-                print("start_date: {} [starts in: {}]".format(
-                    start_date, time_until))
-                print("pts_thresh: {}".format(pts_thresh))
-                print("group_id: {} game_type: {}".format(group_id, game_type))
+                # print("\n\n{}\n\n".format(contest))
+                # print("-----------------------------")
+                print("ID: {} [{}]  buy in: {} payout: {} start_date_edt: {} [starts in: {}] group_id: {} game_type: {} pts_thresh: {}".format(
+                    id, name, buyin, top_payout, start_date_edt, time_until, group_id, game_type, pts_thresh))
                 # print("https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId={}&draftGroupId={}".format(game_type, group_id))
     return contest_dict
 
 
 def get_csv_url(sport, contests):
+    """Given a sport, return the salary export URL based on game_type/group_id."""
     for k, v in contests.items():
         if sport in v['name']:
             game_type = v['game_type']
@@ -145,17 +145,21 @@ def main():
     # parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '-s', '--sport', choices=['NBA', 'NFL', 'CFB', 'PGA'], help='Type of contest (NBA, NFL, PGA, or CFB)')
+        '-s', '--sport', choices=['NBA', 'NFL', 'CFB', 'PGA', 'NHL'], help='Type of contest (NBA, NFL, PGA, CFB, or NHL)')
     args = parser.parse_args()
 
     if args.sport:
+        now = datetime.now()
+        print("Current time: {}".format(now))
         contests = pull_dk_contests(args.sport)
         csv_url = get_csv_url(args.sport, contests)
         day = get_sport_day(args.sport, contests)
         print(day)
-        filename = "DKSalaries_{0}_{1}.csv".format(args.sport, day)
+        filename = "/home/pi/Desktop/dk_salary_owner/DKSalaries_{0}_{1}.csv".format(
+            args.sport, day)
+        # print(filename)
         print(csv_url)
-        print(filename)
+
         pull_soup_data(filename, csv_url, ignore_file=True)
     else:
         contests = pull_dk_contests()

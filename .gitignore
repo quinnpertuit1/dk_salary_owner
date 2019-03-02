@@ -1,7 +1,7 @@
+.venv/
+
 credentials.json
 token.json
-
-Pipfile.lock
 
 task_run_python_script.bat
 

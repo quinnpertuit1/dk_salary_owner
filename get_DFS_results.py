@@ -400,10 +400,10 @@ def add_cond_format_rules(service, spreadsheet_id, sheet_id):
 
 def add_last_updated(service, spreadsheet_id, title):
     """Add (or update) the time in the header."""
-    range = "{}!I1:J1".format(title)
+    range = "{}!J1:L1".format(title)
     now = datetime.datetime.now(tz=EST5EDT())
     values = [
-        ['Last Updated', now.strftime('%Y-%m-%d %H:%M:%S')]
+        ['Last Updated', '', now.strftime('%Y-%m-%d %H:%M:%S')]
     ]
     body = {
         'values': values
@@ -513,10 +513,10 @@ def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
         end_indices = [indices[i] for i in range(1, len(indices))]
         # append size of splt as last index
         end_indices.append(len(splt))
-    elif sport == 'PGA':
-        position = 'G'
+    elif 'PGA' in sport:
+        positions = ['G', 'WG']
         # list comp for indicies of positions in splt
-        indices = [i for i, pos in enumerate(splt) if pos == position]
+        indices = [i for i, pos in enumerate(splt) if pos in positions]
         # list comp for ending indices in splt. for splicing, the second argument is exclusive
         end_indices = [indices[i] for i in range(1, len(indices))]
         # append size of splt as last index
@@ -564,19 +564,25 @@ def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
                 pts = player_dict[name]['pts']
                 value = player_dict[name]['value']
                 perc = player_dict[name]['perc']
+                salary = player_dict[name]['salary']
+                matchup_info = player_dict[name]['matchup_info']
             else:
                 pts = ''
                 value = ''
                 perc = ''
+                salary = ''
+                matchup_info = ''
 
         if sport == 'NBA':
             results[pos] = {
                 'name': name,
                 'pts': pts,
                 'value': value,
-                'perc': perc
+                'perc': perc,
+                'salary': salary,
+                'matchup_info': matchup_info
             }
-        elif sport == 'PGA':
+        elif 'PGA' in sport:
             # because PGA has all 'G', create a list rather than a dictionary
             if pos not in results:
                 results[pos] = []
@@ -586,7 +592,8 @@ def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
                 'name': name,
                 'pts': pts,
                 'value': value,
-                'perc': perc
+                'perc': perc,
+                'salary': salary
             })
         elif sport == 'NFL' or sport == 'CFB':
             # create a list for RB and WR since there are multiple
@@ -598,7 +605,8 @@ def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
                     'name': name,
                     'pts': pts,
                     'value': value,
-                    'perc': perc
+                    'perc': perc,
+                    'salary': salary
                 })
             else:
                 # set QB, TE, FLEX, DST, S-FLEX
@@ -606,7 +614,8 @@ def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
                     'name': name,
                     'pts': pts,
                     'value': value,
-                    'perc': perc
+                    'perc': perc,
+                    'salary': salary
                 }
         elif sport == 'NHL':
             # create a list for C/W/D since there are multiple
@@ -618,7 +627,8 @@ def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
                     'name': name,
                     'pts': pts,
                     'value': value,
-                    'perc': perc
+                    'perc': perc,
+                    'salary': salary
                 })
             else:
                 # set G/UTIL
@@ -626,38 +636,47 @@ def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
                     'name': name,
                     'pts': pts,
                     'value': value,
-                    'perc': perc
+                    'perc': perc,
+                    'salary': salary
                 }
 
-    print(results)
     return results
 
 
 def write_NBA_lineup(lineup, bro):
     ordered_position = ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'UTIL']
     values = [
-        [bro, '', 'PMR', lineup['pmr'], ''],
-        ['Position', 'Player', 'Points', 'Value', 'Own']
+        [bro, '', 'PMR', lineup['pmr'], 'rank', lineup['rank']],
+        ['Position', 'Player', 'Salary', 'Pts', 'Value', 'Own']
     ]
+    rem_salary = 50000
     for position in ordered_position:
         values.append([position, lineup[position]['name'],
-                       lineup[position]['pts'], lineup[position]['value'],
-                       lineup[position]['perc']])
+                       lineup[position]['salary'], lineup[position]['pts'],
+                       lineup[position]['value'], lineup[position]['perc']])
+        if lineup[position]['matchup_info'] in ['In Progress', 'Final']:
+            rem_salary -= int(lineup[position]['salary'])
 
-    values.append(['rank', lineup['rank'], lineup['points'], '', ''])
+    values.append(['', 'rem salary', rem_salary, lineup['points'], '', ''])
     return values
 
 
 def write_PGA_lineup(lineup, bro):
     values = [
-        [bro, '', 'PMR', lineup['pmr']],
-        ['Position', 'Player', 'Points', 'Value', 'Own']
+        [bro, '', 'PMR', lineup['pmr'], '', ''],
+        ['Position', 'Player', 'Salary', 'Pts', 'Value', 'Own']
     ]
-    for golfer in lineup['G']:
-        values.append(['G', golfer['name'], golfer['pts'],
-                       golfer['value'], golfer['perc']])
+    print(lineup)
+    if 'WG' in lineup:
+        for golfer in lineup['WG']:
+            values.append(['WG', golfer['name'], golfer['salary'], golfer['pts'],
+                           golfer['value'], golfer['perc']])
+    elif 'G' in lineup:
+        for golfer in lineup['G']:
+            values.append(['G', golfer['name'], golfer['salary'], golfer['pts'],
+                           golfer['value'], golfer['perc']])
 
-    values.append(['rank', lineup['rank'], lineup['points'], ''])
+    values.append(['rank', lineup['rank'], '', lineup['points'], '', ''])
     return values
 
 
@@ -765,27 +784,40 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
     ]
 
     ultimate_list = []
+    lineup_mod = 4
     if sport == 'NBA':
         for i, (k, v) in enumerate(sorted(lineup.items())):
             # print("i: {} K: {}\nv:{}".format(i, k, v))
+            nba_mod = 11
             values = write_NBA_lineup(v, k)
             for j, z in enumerate(values):
-                if i in [0, 1, 2, 3]:
+                if i < lineup_mod:
                     ultimate_list.append(z)
-                elif i in [4, 5, 6, 7]:
-                    mod = (i % 4) + ((i % 4) * 11) + j
+                elif i >= lineup_mod:
+                    mod = (i % lineup_mod) + ((i % lineup_mod) * nba_mod) + j
                     ultimate_list[mod].extend([''] + z)
             # append an empty list for spacing
             ultimate_list.append([])
-        r = "{}!K3:U54".format(sport)
+        r = "{}!J3:V54".format(sport)
         print("trying to write all lineups to [{}]".format(r))
         write_row(service, spreadsheet_id, r, ultimate_list)
-    elif sport == 'PGA':
+    elif 'PGA' in sport:
         for i, (k, v) in enumerate(sorted(lineup.items())):
             # print("i: {} K: {}\nv:{}".format(i, k, v))
+            golf_mod = 9
             values = write_PGA_lineup(v, k)
-            print("trying to write line [{}] to {}".format(k, ranges[i]))
-            write_row(service, spreadsheet_id, ranges[i], values)
+            for j, z in enumerate(values):
+                if i < lineup_mod:
+                    ultimate_list.append(z)
+                elif i >= lineup_mod:
+                    # mod = (i % 4) + ((i % 4) * 10) + j
+                    mod = (i % lineup_mod) + ((i % lineup_mod) * golf_mod) + j
+                    ultimate_list[mod].extend([''] + z)
+            # append an empty list for spacing
+            ultimate_list.append([])
+        r = "{}!J3:V54".format(sport)
+        print("trying to write all lineups to [{}]".format(r))
+        write_row(service, spreadsheet_id, r, ultimate_list)
     elif sport == 'NFL':
         for i, (k, v) in enumerate(sorted(lineup.items())):
             # print("i: {} K: {}\nv:{}".format(i, k, v))
@@ -855,7 +887,7 @@ def main():
     parser.add_argument('-i', '--id', type=int, required=True,
                         help='Contest ID from DraftKings',)
     parser.add_argument('-c', '--csv', required=True, help='Slate CSV from DraftKings',)
-    parser.add_argument('-s', '--sport', choices=['NBA', 'NFL', 'CFB', 'PGA', 'NHL'],
+    parser.add_argument('-s', '--sport', choices=['NBA', 'NFL', 'CFB', 'PGAMain', 'PGAWeekend', 'PGAShowdown', 'NHL'],
                         required=True, help='Type of contest (NBA, NFL, PGA, CFB, or NHL)')
     parser.add_argument('-v', '--verbose', help='Increase verbosity')
     args = parser.parse_args()
@@ -911,8 +943,7 @@ def main():
                 'rank': rank,
                 'lineup': lineup,
                 'pmr': pmr,
-                'points': points,
-                # 'perc': perc
+                'points': points
             }
 
         stats = row[7:]
@@ -924,7 +955,7 @@ def main():
             name = massage_name(stats[0])
             pos = stats[1]
             salary = int(salary_dict[name]['salary'])
-            if sport != 'PGA':
+            if 'PGA' not in sport:
                 team_abbv = salary_dict[name]['team_abbv']
                 game_info = salary_dict[name]['game_info']
                 matchup_info = get_matchup_info(game_info, team_abbv)
@@ -947,7 +978,8 @@ def main():
                 'salary': salary,
                 'perc': perc,
                 'pts': pts,
-                'value': value
+                'value': value,
+                'matchup_info': matchup_info
             }
             # print([name, pos, salary, perc, pts, value])
             values.append([pos, name, team_abbv, matchup_info, salary, perc, pts, value])
