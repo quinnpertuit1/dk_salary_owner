@@ -14,7 +14,7 @@ import datetime
 from http.cookiejar import CookieJar
 # from pprint import pprint
 # from bs4 import BeautifulSoup
-# import browsercookie
+import browsercookie
 
 from googleapiclient.discovery import build
 from httplib2 import Http
@@ -172,19 +172,29 @@ def pull_contest_zip(filename, contest_id):
     contest_csv_url = "https://www.draftkings.com/contest/exportfullstandingscsv/{0}".format(
         contest_id)
 
-    # cookies = browsercookie.chrome()
-
-    # create CookieJar to pass to requests from json file
-    jar = CookieJar()
-    with open('cookies.json') as f:
-        cookies = json.load(f)
-        for c in cookies:
-            cookie = requests.cookies.create_cookie(
-                name=c['name'], value=c['value'], domain=c['domain'], path=c['path'], secure=c['secure'])
-            jar.set_cookie(cookie)
+    cookies = browsercookie.chrome()
 
     # retrieve exported contest csv
-    r = requests.get(contest_csv_url, cookies=jar)
+    # r = requests.get(contest_csv_url, cookies=jar)
+    s = requests.Session()
+    # get(contest_csv_url)
+    r = s.get(contest_csv_url, cookies=cookies)
+
+    # new method
+    # with open('cookies.json') as f:
+    #     cookies = json.load(f)
+    #     for c in cookies:
+    #         if c['name'] in s.cookies:
+    #             print("found {} in s.cookies".format(c['name']))
+    #         else:
+    #             print("did not find {} in s.cookies".format(c['name']))
+    #             cookie = requests.cookies.create_cookie(
+    #                 name=c['name'], value=c['value'], domain=c['domain'], path=c['path'], secure=c['secure'])
+    #             s.cookies.set_cookie(cookie)
+
+    # r = s.get(contest_csv_url)
+    # r = s.get
+    print(s.cookies)
 
     print(r.headers)
     # if headers say file is a CSV file
@@ -196,7 +206,7 @@ def pull_contest_zip(filename, contest_id):
         # return list
         return list(rdr)
     elif 'text/html' in r.headers['Content-Type']:
-        print(r.content)
+        # print(r)
         exit('We cannot do anything with html!')
     else:
         # request will be a zip file
@@ -586,6 +596,9 @@ def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
                 perc = ''
                 salary = ''
                 matchup_info = ''
+
+        if 'LOCKED' in name:
+            name = 'LOCKED 🔒'
 
         if sport == 'NBA':
             results[pos] = {
