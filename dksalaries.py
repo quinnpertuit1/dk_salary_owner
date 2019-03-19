@@ -356,11 +356,22 @@ def main():
         if args.sport == 'GOLF':
             args.sport = 'PGA'
 
+        start_hour = dt.strftime('%H')
+        print(dt)
+        start_weekday = dt.strftime('%A')
+        start_monthday = dt.strftime('%d')
+        start_month = dt.strftime('%m')
+
+        end_dt = dt + datetime.timedelta(days=1)
+        end_weekday = end_dt.strftime('%A')
+        end_monthday = end_dt.strftime('%d')
+        end_month = end_dt.strftime('%m')
+
         # print cron jobs
-        print("*/10 0-1,19-23 {0}-{1:02d} {2} * cd /home/pi/Desktop/dk_salary_owner/ && /usr/local/bin/pipenv run python download_DK_salary.py -s {3} -dg {4} -f DKSalaries_{3}_{5}.csv >> /home/pi/Desktop/test.log 2>&1".format(
-            monthday, int(monthday) + 1, month, args.sport, contest['dg'], weekday))
-        print("*/5 0-1,19-23 {0}-{1:02d} {2} * cd /home/pi/Desktop/dk_salary_owner/ && /usr/local/bin/pipenv run python get_DFS_results.py -s {3} -i {4} -c DKSalaries_{3}_{5}.csv >> /home/pi/Desktop/NBA_results.log 2>&1".format(
-            monthday, int(monthday) + 1, month, args.sport, contest['id'], weekday))
+        print("*/10 0-1,19-23 {0}-{1} {2} * cd /home/pi/Desktop/dk_salary_owner/ && /usr/local/bin/pipenv run python download_DK_salary.py -s {3} -dg {4} -f DKSalaries_{3}_{5}.csv >> /home/pi/Desktop/test.log 2>&1".format(
+            start_monthday, end_monthday, start_month, args.sport, contest['dg'], start_weekday))
+        print("*/5 0-1,19-23 {0}-{1} {2} * cd /home/pi/Desktop/dk_salary_owner/ && /usr/local/bin/pipenv run python get_DFS_results.py -s {3} -i {4} -c DKSalaries_{3}_{5}.csv >> /home/pi/Desktop/NBA_results.log 2>&1".format(
+            start_monthday, end_monthday, start_month, args.sport, contest['id'], start_weekday))
 
 
 if __name__ == '__main__':
