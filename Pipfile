@@ -14,5 +14,6 @@ gspread = "*"
 "html5lib" = "*"
 python-dateutil = "*"
 pytz = "*"
+nba-api = "*"
 
 [dev-packages]
