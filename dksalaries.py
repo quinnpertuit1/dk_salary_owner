@@ -1,4 +1,6 @@
 """
+Find contests for a sport and print cron job.
+
 URL: https://www.draftkings.com/lobby/getcontests?sport=NBA
 Response format: {
     'SelectedSport': 4,
@@ -48,12 +50,9 @@ CSVPATH = 'nba/data/salaries'
 
 
 def find_new_contests():
-    """
-    Maybe this belongs in another module
-    """
-
+    """Maybe this belongs in another module."""
     def get_pst_from_timestamp(timestamp_str):
-        timestamp = float(re.findall('[^\d]*(\d+)[^\d]*', timestamp_str)[0])
+        timestamp = float(re.findall(r'[^\d]*(\d+)[^\d]*', timestamp_str)[0])
         return datetime.datetime.fromtimestamp(
             timestamp / 1000, timezone('America/Los_Angeles')
         )
@@ -248,7 +247,7 @@ def get_largest_contest(contests, entry_fee, query=None, dt=datetime.datetime.to
     # sort contests by # of entries
     sorted_list = sorted(ls, key=lambda x: x['m'], reverse=True)
 
-    # if there is a sorted list, return the
+    # if there is a sorted list, return the first element
     if sorted_list:
         return sorted_list[0]
 
@@ -286,10 +285,10 @@ def main():
     if args.query:
         query = args.query
 
-    today = datetime.datetime.today()
-    weekday = today.strftime('%A')
-    monthday = today.strftime('%d')
-    month = today.strftime('%m')
+    # today = datetime.datetime.today()
+    # weekday = today.strftime('%A')
+    # monthday = today.strftime('%d')
+    # month = today.strftime('%m')
 
     # set cookies based on Chrome session
     COOKIES = browsercookie.chrome()
@@ -329,8 +328,8 @@ def main():
     # ] + get_contests_by_entries(response_contests, 3, 50000)
 
     contests = [
-        get_largest_contest(response_contests, 3, query),
-        get_largest_contest(response_contests, 0.25, query),
+        # get_largest_contest(response_contests, 3, query),
+        # get_largest_contest(response_contests, 0.25, query),
         get_largest_contest(response_contests, 25, query)
     ]
 
