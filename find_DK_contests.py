@@ -79,7 +79,7 @@ def pull_dk_contests(sport=None, reload=False):
         contest_json = json.loads(json_str)
 
         bool_quarters = False
-        #now = datetime.utcnow()
+        # now = datetime.utcnow()
         now = datetime.now()
         # iterate through json
         for contest in contest_json:
