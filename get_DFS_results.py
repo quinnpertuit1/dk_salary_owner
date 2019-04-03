@@ -883,7 +883,7 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
         r = "{}!J3:V54".format(sport)
         print("trying to write all lineups to [{}]".format(r))
         write_row(service, spreadsheet_id, r, ultimate_list)
-    elif 'OFGA' in sport:
+    elif 'PGA' in sport:
         for i, (k, v) in enumerate(sorted(lineup.items())):
             # print("i: {} K: {}\nv:{}".format(i, k, v))
             golf_mod = 9
@@ -924,17 +924,17 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
     elif sport == 'MLB':
         for i, (k, v) in enumerate(sorted(lineup.items())):
             # print("i: {} K: {}\nv:{}".format(i, k, v))
-            nba_mod = 10
+            mlb_mod = 10
             values = write_MLB_lineup(v, k)
             for j, z in enumerate(values):
                 if i < lineup_mod:
                     ultimate_list.append(z)
                 elif i >= lineup_mod:
-                    mod = (i % lineup_mod) + ((i % lineup_mod) * nba_mod) + j
+                    mod = (i % lineup_mod) + ((i % lineup_mod) * mlb_mod) + j
                     ultimate_list[mod].extend([''] + z)
             # append an empty list for spacing
             ultimate_list.append([])
-        r = "{}!J3:V54".format(sport)
+        r = "{}!J3:V57".format(sport)
         print("trying to write all lineups to [{}]".format(r))
         write_row(service, spreadsheet_id, r, ultimate_list)
 
@@ -984,16 +984,25 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--id', type=int, required=True,
                         help='Contest ID from DraftKings',)
-    parser.add_argument('-c', '--csv', required=True, help='Slate CSV from DraftKings',)
+    parser.add_argument('-c', '--csv', help='Slate CSV from DraftKings',)
     parser.add_argument('-s', '--sport', choices=['NBA', 'NFL', 'CFB', 'PGAMain', 'PGAWeekend', 'PGAShowdown', 'NHL', 'MLB'],
                         required=True, help='Type of contest (NBA, NFL, PGA, CFB, NHL, or MLB)')
     parser.add_argument('-v', '--verbose', help='Increase verbosity')
     args = parser.parse_args()
 
+    now = datetime.datetime.now()
+    print("Current time: {}".format(now))
+
+    dir = '/home/pi/Desktop/dk_salary_owner'
+    # set the filename for the salary CSV
+    if args.csv:
+        fn = args.csv
+    else:
+        fn = "DKSalaries_{}_{}.csv".format(args.sport, now.strftime('%A'))
+
     # 62753724 Thursday night CFB $5 DU
     # https://www.draftkings.com/contest/exportfullstandingscsv/62753724
     contest_id = args.id
-    fn = args.csv
 
     # 1244542866
     # CSV_URL = 'https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId=21&draftGroupId=22168'
@@ -1001,23 +1010,15 @@ def main():
     # 12 = MLB 21 = NFL 9 = PGA 24 = NASCAR 10 = Soccer 13 = MMA
     # friday night nba slate
     # https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId=70&draftGroupId=22401
+    sport = args.sport
 
-    # fn = 'DKSalaries_week7_full.csv'
-    # fn = 'DKSalaries_Tuesday_basketball.csv'
     # dir = path.join('c:', sep, 'users', 'adam', 'documents', 'git', 'dk_salary_owner')
-    dir = '/home/pi/Desktop/dk_salary_owner'
-    # fn = 'DKSalaries_Sunday_NFL.csv'
 
     salary_dict = read_salary_csv(fn)
 
     # link to get csv export from contest id
     # https://www.draftkings.com/contest/exportfullstandingscsv/62252398
 
-    # client id  837292985707-anvf2dcn7ng1ts9jq1b452qa4rfs5k25.apps.googleusercontent.com
-    # secret 4_ifPYAtKg0DTuJ2PJDfsDda
-
-    now = datetime.datetime.now()
-    print("Current time: {}".format(now))
     fn2 = "contest-standings-{}.csv".format(contest_id)
     contest_list = pull_contest_zip(fn2, contest_id)
     parsed_lineup = {}
@@ -1025,7 +1026,7 @@ def main():
     bros = ['aplewandowski', 'FlyntCoal', 'Cubbiesftw23',
             'Mcoleman1902', 'cglenn91', 'Notorious', 'Bra3105', 'ChipotleAddict']
     values = []
-    sport = args.sport
+
     bro_lineups = {}
     player_dict = {}
     for i, row in enumerate(contest_list[1:]):

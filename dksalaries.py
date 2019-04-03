@@ -236,13 +236,17 @@ def get_largest_contest(contests, entry_fee, query=None, dt=datetime.datetime.to
     ls = []
     for c in contests:
         ts = get_dt_from_timestamp(c['sd'])
+        # check if the date is correct
         if ts.date() == dt.date():
-            if c['a'] == entry_fee:
-                if query:
-                    if query in c['n']:
+            # single entry only
+            if c['mec'] == 1:
+                # match the entry fee
+                if c['a'] == entry_fee:
+                    if query:
+                        if query in c['n']:
+                            ls.append(c)
+                    else:
                         ls.append(c)
-                else:
-                    ls.append(c)
 
     # sort contests by # of entries
     sorted_list = sorted(ls, key=lambda x: x['m'], reverse=True)
@@ -261,13 +265,58 @@ def get_contests_by_entries(contests, entry_fee, limit):
                   reverse=True)
 
 
+def print_cron_string(contest, sport, start_dt):
+
+    py_str = 'cd /home/pi/Desktop/dk_salary_owner/ && /usr/local/bin/pipenv run python'
+    dl_str = py_str + ' download_DK_salary.py'
+    get_str = py_str + ' get_DFS_results.py'
+
+    start_weekday = start_dt.strftime('%A')
+
+    # set interval and length depending on sport
+    if sport == 'NBA':
+        sport_length = 5
+        dl_interval = "*/10"
+        get_interval = "*/5"
+    elif sport == 'MLB':
+        sport_length = 5
+        dl_interval = '1-59/15'
+        get_interval = '1-59/10'
+    elif sport == 'PGA':
+        sport_length = 8
+        dl_interval = '3-59/30'
+        get_interval = '3-59/15'
+
+    # add about how long the slate should be
+    end_dt = start_dt + datetime.timedelta(hours=sport_length)
+    print("end: {}".format(end_dt))
+
+    # if dates are the same, we don't add days or hours
+    if start_dt.date() == end_dt.date():
+        print("dates are the same")
+        hours = "{}-{}".format(start_dt.strftime('%H'), end_dt.strftime('%H'))
+        days = "{}".format(start_dt.strftime('%d'))
+    else:
+        print("dates are not the same - that means end_dt extends into the next day")
+        hours = "00-{},{}-23".format(end_dt.strftime('%H'),
+                                     start_dt.strftime('%H'))
+        days = "{}-{}".format(start_dt.strftime('%d'), end_dt.strftime('%d'))
+
+    cron_str = "{0} {1} {2} *".format(hours, days, end_dt.strftime('%m'))
+
+    print("{0} {1} {2} -s {3} -dg {4} >> /home/pi/Desktop/{3}_results.log 2>&1".format(
+        dl_interval, cron_str, dl_str, sport, contest['dg']))
+    print("{0} {1} {2} -s {3} -i {4} >> /home/pi/Desktop/{3}_results.log 2>&1".format(
+        get_interval, cron_str, get_str, sport, contest['id']))
+
+
 def main():
     """"""
     # parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '-s', '--sport', choices=['NBA', 'NFL', 'CFB', 'GOLF', 'NHL'],
-        required=True, help='Type of contest (NBA, NFL, GOLF, CFB, or NHL)')
+        '-s', '--sport', choices=['NBA', 'NFL', 'CFB', 'GOLF', 'NHL', 'MLB'],
+        required=True, help='Type of contest (NBA, NFL, GOLF, CFB, NHL, or MLB)')
     parser.add_argument(
         '-l', '--live', action='store_true', help='Get live contests')
     parser.add_argument(
@@ -284,11 +333,6 @@ def main():
     query = None
     if args.query:
         query = args.query
-
-    # today = datetime.datetime.today()
-    # weekday = today.strftime('%A')
-    # monthday = today.strftime('%d')
-    # month = today.strftime('%m')
 
     # set cookies based on Chrome session
     COOKIES = browsercookie.chrome()
@@ -329,7 +373,7 @@ def main():
 
     contests = [
         # get_largest_contest(response_contests, 3, query),
-        # get_largest_contest(response_contests, 0.25, query),
+        # get_largest_contest(response_contests, 4, query),
         get_largest_contest(response_contests, 25, query)
     ]
 
@@ -338,39 +382,29 @@ def main():
         # print(contest)
         # print("---------------")
         date_time = get_pst_from_timestamp(contest['sd'])
-        dt = get_dt_from_timestamp(contest['sd'])
+        start_dt = get_dt_from_timestamp(contest['sd'])
         print("name: {}".format(contest['n']))
         print("date_time: {}".format(date_time))
-        print("dt: {}".format(dt))
+        print("start_dt: {}".format(start_dt))
         print("contest id: {}".format(contest['id']))
         print("draft group: {}".format(contest['dg']))
         print("date: {}".format(date_time.date()))
         print("sd: {}".format(contest['sd']))
-        print("total_prizes: {}".format(contest['po']))
+        print("total prizes: {}".format(contest['po']))
         print("entries: {}".format(contest['m']))
-        print("entry_fee: {}".format(contest['a']))
+        print("entry fee: {}".format(contest['a']))
+        print("entry count: {}".format(contest['ec']))
+        print("mec: {}".format(contest['mec']))
         print("")
 
         # change GOLF back to PGA
         if args.sport == 'GOLF':
             args.sport = 'PGA'
 
-        start_hour = dt.strftime('%H')
-        print(dt)
-        start_weekday = dt.strftime('%A')
-        start_monthday = dt.strftime('%d')
-        start_month = dt.strftime('%m')
+        start_hour = start_dt.strftime('%H')
+        print("start: {}".format(start_dt))
 
-        end_dt = dt + datetime.timedelta(days=1)
-        end_weekday = end_dt.strftime('%A')
-        end_monthday = end_dt.strftime('%d')
-        end_month = end_dt.strftime('%m')
-
-        # print cron jobs
-        print("*/10 0-1,19-23 {0}-{1} {2} * cd /home/pi/Desktop/dk_salary_owner/ && /usr/local/bin/pipenv run python download_DK_salary.py -s {3} -dg {4} -f DKSalaries_{3}_{5}.csv >> /home/pi/Desktop/test.log 2>&1".format(
-            start_monthday, end_monthday, start_month, args.sport, contest['dg'], start_weekday))
-        print("*/5 0-1,19-23 {0}-{1} {2} * cd /home/pi/Desktop/dk_salary_owner/ && /usr/local/bin/pipenv run python get_DFS_results.py -s {3} -i {4} -c DKSalaries_{3}_{5}.csv >> /home/pi/Desktop/NBA_results.log 2>&1".format(
-            start_monthday, end_monthday, start_month, args.sport, contest['id'], start_weekday))
+        print_cron_string(contest, args.sport, start_dt)
 
 
 if __name__ == '__main__':

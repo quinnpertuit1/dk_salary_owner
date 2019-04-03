@@ -59,7 +59,7 @@ def main():
                             required=True, help='Type of contest (NBA, NFL, PGA, CFB, NHL, or MLB)')
     arg_parser.add_argument('-dg', '--draft_group', type=int,
                             required=True, help='Draft Group ID')
-    arg_parser.add_argument('-f', '--filename', required=True, help='Draft Group ID')
+    arg_parser.add_argument('-f', '--filename', help='Output filename')
     args = arg_parser.parse_args()
 
     contest_type_id = {
@@ -73,6 +73,12 @@ def main():
     if args.sport:
         now = datetime.now()
         print("Current time: {}".format(now))
+        # set the filename for the salary CSV
+        if args.filename:
+            fn = args.filename
+        else:
+            fn = "DKSalaries_{}_{}.csv".format(args.sport, now.strftime('%A'))
+
         if args.sport in contest_type_id:
             print("contest_type_id [{}]: {}".format(
                 args.sport, contest_type_id[args.sport]))
@@ -83,7 +89,7 @@ def main():
         csv_url = "https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId={0}&draftGroupId={1}".format(
             contest_type_id[args.sport], args.draft_group)
         print(csv_url)
-        download_salary_csv(dir + args.filename, csv_url)
+        download_salary_csv(dir + fn, csv_url)
 
 
 if __name__ == '__main__':
