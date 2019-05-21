@@ -3,6 +3,7 @@ import argparse
 import csv
 import io
 import json
+import pickle
 import requests
 # from unidecode import unidecode
 import unicodedata
@@ -172,13 +173,71 @@ def pull_contest_zip(filename, contest_id):
     contest_csv_url = "https://www.draftkings.com/contest/exportfullstandingscsv/{0}".format(
         contest_id)
 
-    cookies = browsercookie.chrome()
+    # cookies = browsercookie.chrome()
+
+    # for c in cookies:
+    #     if 'draft' not in c.domain:
+    #         print("Clearing {} {} {} ".format(c.domain, c.path, c.name))
+    #         cookies.clear(c.domain, c.path, c.name)
 
     # retrieve exported contest csv
-    # r = requests.get(contest_csv_url, cookies=jar)
+    # s = requests.Session()
+    # r = s.get(contest_csv_url, cookies=cookies)
+
+    # trying load pickle cookie method
     s = requests.Session()
-    # get(contest_csv_url)
-    r = s.get(contest_csv_url, cookies=cookies)
+    s.get('https://www.draftkings.com/')
+
+    cookies = ''
+    with open('pickled_cookies_works.txt', 'rb') as f:
+        cookies = pickle.load(f)
+
+    # with open('cookies.json') as f:
+    #     cookies = json.load(f)
+    #     for c in cookies:
+    #         if c['name'] in s.cookies:
+    #             print("removing {} from 'cookies' -- ".format(c.name), end='')
+    #             cookies.clear(c.domain, c.path, c.name)
+    # exit()
+    #         else:
+    #             print("did not find {} in s.cookies".format(c['name']))
+    #             cookie = requests.cookies.create_cookie(
+    #                 name=c['name'], value=c['value'], domain=c['domain'], path=c['path'], secure=c['secure'])
+    #             s.cookies.set_cookie(cookie)
+
+    now = datetime.datetime.now()
+
+    for c in cookies:
+        # if the cookies already exists from a legitimate fresh session, clear them out
+        if c.name in s.cookies:
+            # print("removing {} from 'cookies' -- ".format(c.name), end='')
+            cookies.clear(c.domain, c.path, c.name)
+        else:
+            # print(datetime.datetime(1970, 1, 1) + datetime.timedelta(seconds=c.expires))
+            # print("c.name {} expires: {}".format(c.name, c.expires))
+            if not c.expires:
+                continue
+
+            if c.expires <= now.timestamp():
+                print("c.name {} has EXPIRED!!! (c.expires: {} now: {})".format(
+                    c.name, datetime.datetime.fromtimestamp(c.expires), now))
+            else:  # check if
+                delta_hours = 5
+                d = datetime.datetime.fromtimestamp(
+                    c.expires) - datetime.timedelta(hours=delta_hours)
+                # within 5 hours
+                if d <= now:
+                    print("c.name {} expires within {} hours!! difference: {} (c.expires: {} now: {})".format(
+                        c.name, delta_hours, datetime.datetime.fromtimestamp(c.expires) - now, datetime.datetime.fromtimestamp(c.expires), now))
+
+    # exit()
+    print("adding all missing cookies to session.cookies")
+    print(cookies)
+    s.cookies.update(cookies)
+
+    r = s.get(contest_csv_url)
+    print(r.status_code)
+    print(r.url)
 
     # new method
     # with open('cookies.json') as f:
@@ -194,11 +253,26 @@ def pull_contest_zip(filename, contest_id):
 
     # r = s.get(contest_csv_url)
     # r = s.get
-    print(s.cookies)
+
+    # print("r.cookies")
+    # for c in r.cookies:
+    #     print("c.name: {} c.expires: {}".format(c.name, c.expires))
+    # # print()
+    # # print("s.session.cookies")
+    # print("--------------------")
+    # print("s.cookies")
+    # for c in s.cookies:
+    #     print("c.name: {} c.expires: {}".format(c.name, c.expires))
+    #     # print(type(c))
+    # print("--------------------")
 
     print(r.headers)
     # if headers say file is a CSV file
     if r.headers['Content-Type'] == 'text/csv':
+        # write working cookies
+        with open('pickled_cookies_works.txt', 'wb') as f:
+            pickle.dump(s.cookies, f)
+
         # decode bytes into string
         csvfile = r.content.decode('utf-8')
         # open reader object on csvfile
@@ -207,8 +281,14 @@ def pull_contest_zip(filename, contest_id):
         return list(rdr)
     elif 'text/html' in r.headers['Content-Type']:
         # print(r)
+        # write broken cookies
+        with open('pickled_cookies_broken.txt', 'wb') as f:
+            pickle.dump(s.cookies, f)
         exit('We cannot do anything with html!')
     else:
+        # write working cookies
+        with open('pickled_cookies_works.txt', 'wb') as f:
+            pickle.dump(s.cookies, f)
         # request will be a zip file
         z = zipfile.ZipFile(io.BytesIO(r.content))
 
@@ -216,7 +296,7 @@ def pull_contest_zip(filename, contest_id):
             # extract file - it seems easier this way
             z.extract(name)
             with z.open(name) as csvfile:
-                print("name within zipfile".format(name))
+                print("name within zipfile: {}".format(name))
                 # convert to TextIOWrapper object
                 lines = io.TextIOWrapper(csvfile, encoding='utf-8', newline='\r\n')
                 # open reader object on csvfile within zip file
@@ -686,7 +766,8 @@ def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
                     'pts': pts,
                     'value': value,
                     'perc': perc,
-                    'salary': salary
+                    'salary': salary,
+                    'matchup_info': matchup_info
                 })
             else:
                 # set C/1B/2B/3B/SS
@@ -695,7 +776,8 @@ def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
                     'pts': pts,
                     'value': value,
                     'perc': perc,
-                    'salary': salary
+                    'salary': salary,
+                    'matchup_info': matchup_info
                 }
 
     return results
@@ -724,7 +806,6 @@ def write_PGA_lineup(lineup, bro):
         [bro, '', 'PMR', lineup['pmr'], '', ''],
         ['Position', 'Player', 'Salary', 'Pts', 'Value', 'Own']
     ]
-    print(lineup)
     if 'WG' in lineup:
         for golfer in lineup['WG']:
             values.append(['WG', golfer['name'], golfer['salary'], golfer['pts'],
@@ -817,22 +898,27 @@ def write_MLB_lineup(lineup, bro):
         [bro, '', 'PMR', lineup['pmr'], 'rank', lineup['rank']],
         ['Position', 'Player', 'Salary', 'Pts', 'Value', 'Own']
     ]
+    rem_salary = 50000
     # append P
     for P in lineup['P']:
         values.append(['P', P['name'], P['salary'], P['pts'], P['value'], P['perc']])
+        if P['matchup_info'] in ['In Progress', 'Final']:
+            rem_salary -= int(P['salary'])
     # append C/1B/2B/3B/SS
     for position in ['C', '1B', '2B', '3B', 'SS']:
         values.append([position, lineup[position]['name'],
                        lineup[position]['salary'], lineup[position]['pts'],
                        lineup[position]['value'], lineup[position]['perc']])
-        # if lineup[position]['matchup_info'] in ['In Progress', 'Final']:
-        #         rem_salary -= int(lineup[position]['salary'])
+        if lineup[position]['matchup_info'] in ['In Progress', 'Final']:
+            rem_salary -= int(lineup[position]['salary'])
     # append OF
     for OF in lineup['OF']:
         values.append(['OF', OF['name'], OF['salary'],
                        OF['pts'], OF['value'], OF['perc']])
+        if OF['matchup_info'] in ['In Progress', 'Final']:
+            rem_salary -= int(OF['salary'])
 
-    values.append(['', '', '', lineup['points'], '', ''])
+    values.append(['', 'rem salary', rem_salary, lineup['points'], '', ''])
     return values
 
 
@@ -884,19 +970,20 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
         print("trying to write all lineups to [{}]".format(r))
         write_row(service, spreadsheet_id, r, ultimate_list)
     elif 'PGA' in sport:
-        for i, (k, v) in enumerate(sorted(lineup.items())):
-            # print("i: {} K: {}\nv:{}".format(i, k, v))
-            golf_mod = 9
-            values = write_PGA_lineup(v, k)
-            for j, z in enumerate(values):
-                if i < lineup_mod:
-                    ultimate_list.append(z)
-                elif i >= lineup_mod:
-                    # mod = (i % 4) + ((i % 4) * 10) + j
-                    mod = (i % lineup_mod) + ((i % lineup_mod) * golf_mod) + j
-                    ultimate_list[mod].extend([''] + z)
-            # append an empty list for spacing
-            ultimate_list.append([])
+        # for i, (k, v) in enumerate(sorted(lineup.items())):
+        #     # print("i: {} K: {}\nv:{}".format(i, k, v))
+        #     golf_mod = 9
+        #     values = write_PGA_lineup(v, k)
+        #     for j, z in enumerate(values):
+        #         if i < lineup_mod:
+        #             ultimate_list.append(z)
+        #         elif i >= lineup_mod:
+        #             # mod = (i % 4) + ((i % 4) * 10) + j
+        #             mod = (i % lineup_mod) + ((i % lineup_mod) * golf_mod) + j
+        #             ultimate_list[mod].extend([''] + z)
+        #     # append an empty list for spacing
+        #     ultimate_list.append([])
+        ultimate_list = build_lineup_list(lineup, sport)
         r = "{}!J3:V54".format(sport)
         print("trying to write all lineups to [{}]".format(r))
         write_row(service, spreadsheet_id, r, ultimate_list)
@@ -923,8 +1010,7 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
             write_row(service, spreadsheet_id, NFL_ranges[i], values)
     elif sport == 'MLB':
         for i, (k, v) in enumerate(sorted(lineup.items())):
-            # print("i: {} K: {}\nv:{}".format(i, k, v))
-            mlb_mod = 10
+            mlb_mod = 13
             values = write_MLB_lineup(v, k)
             for j, z in enumerate(values):
                 if i < lineup_mod:
@@ -937,6 +1023,31 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
         r = "{}!J3:V57".format(sport)
         print("trying to write all lineups to [{}]".format(r))
         write_row(service, spreadsheet_id, r, ultimate_list)
+
+
+def build_lineup_list(lineup, sport):
+    print("build_lineup_list(lineup, {})".format(sport))
+    ultimate_list = []
+    sport_mod = 1
+    lineup_mod = 4
+
+    if 'PGA' in sport:
+        sport_mod = 9
+
+    for i, (k, v) in enumerate(sorted(lineup.items())):
+        # print("i: {} K: {}\nv:{}".format(i, k, v))
+        values = write_PGA_lineup(v, k)
+        for j, z in enumerate(values):
+            if i < lineup_mod:
+                ultimate_list.append(z)
+            elif i >= lineup_mod:
+                # mod = (i % 4) + ((i % 4) * 10) + j
+                mod = (i % lineup_mod) + ((i % lineup_mod) * sport_mod) + j
+                ultimate_list[mod].extend([''] + z)
+        # append an empty list for spacing
+        ultimate_list.append([])
+
+    return ultimate_list
 
 
 def read_salary_csv(fn):
@@ -960,26 +1071,42 @@ def read_salary_csv(fn):
         return salary
 
 
-def massage_name(name):
-    """Manually remove accents from peoples' names."""
-    # wtf is going on with these guys' names?
-    if 'Exum' in name:
-        name = 'Dante Exum'
-    if 'Guillermo Hernan' in name:
-        name = 'Guillermo Hernangomez'
-    if 'Juancho Hernan' in name:
-        name = 'Juancho Hernangomez'
-    if 'lex Abrines' in name:
-        name = 'Alex Abrines'
-    if 'Luwawu-Cabarrot' in name:
-        name = 'Timothe Luwawu-Cabarrot'
-    if ' Calder' in name:
-        name = 'Jose Calderon'
-    return name
+# TODO remove since i use strip_accents at the top
+# def massage_name(name):
+#     """Manually remove accents from peoples' names."""
+#     # wtf is going on with these guys' names?
+#     if 'Exum' in name:
+#         name = 'Dante Exum'
+#     if 'Guillermo Hernan' in name:
+#         name = 'Guillermo Hernangomez'
+#     if 'Juancho Hernan' in name:
+#         name = 'Juancho Hernangomez'
+#     if 'lex Abrines' in name:
+#         name = 'Alex Abrines'
+#     if 'Luwawu-Cabarrot' in name:
+#         name = 'Timothe Luwawu-Cabarrot'
+#     if ' Calder' in name:
+#         name = 'Jose Calderon'
+#     return name
+
+
+def text_adam_cookie_issue():
+    # create/check file for date
+
+    # send message
+    pass
 
 
 def main():
-    """Use contest ID to update Google Sheet with DFS results."""
+    """Use contest ID to update Google Sheet with DFS results.
+
+    Example export CSV/ZIP link
+    https://www.draftkings.com/contest/exportfullstandingscsv/62753724
+
+    Example salary CSV link
+    https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId=70&draftGroupId=22401
+    12 = MLB 21 = NFL 9 = PGA 24 = NASCAR 10 = Soccer 13 = MMA
+    """
     # parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--id', type=int, required=True,
@@ -1000,29 +1127,16 @@ def main():
     else:
         fn = "DKSalaries_{}_{}.csv".format(args.sport, now.strftime('%A'))
 
-    # 62753724 Thursday night CFB $5 DU
-    # https://www.draftkings.com/contest/exportfullstandingscsv/62753724
     contest_id = args.id
-
-    # 1244542866
-    # CSV_URL = 'https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId=21&draftGroupId=22168'
-    # draftgroup info
-    # 12 = MLB 21 = NFL 9 = PGA 24 = NASCAR 10 = Soccer 13 = MMA
-    # friday night nba slate
-    # https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId=70&draftGroupId=22401
     sport = args.sport
 
-    # dir = path.join('c:', sep, 'users', 'adam', 'documents', 'git', 'dk_salary_owner')
-
+    # read salary CSV
     salary_dict = read_salary_csv(fn)
 
-    # link to get csv export from contest id
-    # https://www.draftkings.com/contest/exportfullstandingscsv/62252398
-
+    # pull contest standings
     fn2 = "contest-standings-{}.csv".format(contest_id)
     contest_list = pull_contest_zip(fn2, contest_id)
     parsed_lineup = {}
-    # values = interate_contest_list(contest_list, salary_dict, args.sport)
     bros = ['aplewandowski', 'FlyntCoal', 'Cubbiesftw23',
             'Mcoleman1902', 'cglenn91', 'Notorious', 'Bra3105', 'ChipotleAddict']
     values = []
@@ -1036,6 +1150,7 @@ def main():
         points = row[4]
         lineup = row[5]
 
+        # find lineup for friends
         if name in bros:
             print("found bro {}".format(name))
             bro_lineups[name] = {
@@ -1051,7 +1166,6 @@ def main():
             if all('' == s or s.isspace() for s in stats):
                 continue
 
-            # name = massage_name(stats[0])
             name = strip_accents(stats[0])
             pos = stats[1]
             salary = int(salary_dict[name]['salary'])
@@ -1081,7 +1195,6 @@ def main():
                 'value': value,
                 'matchup_info': matchup_info
             }
-            # print([name, pos, salary, perc, pts, value])
             values.append([pos, name, team_abbv, matchup_info, salary, perc, pts, value])
 
     # google sheets API boilerplate
@@ -1098,7 +1211,7 @@ def main():
             sport, v['lineup'], v['points'], v['pmr'], v['rank'], player_dict)
         print(parsed_lineup[bro])
 
-    # Call the Sheets API
+    # call the Sheets API
     spreadsheet_id = '1Jv5nT-yUoEarkzY5wa7RW0_y0Dqoj8_zDrjeDs-pHL4'
     RANGE_NAME = "{}!A2:S".format(args.sport)
     sheet_id = find_sheet_id(service, spreadsheet_id, args.sport)
@@ -1113,9 +1226,6 @@ def main():
     # add_cond_format_rules(service, spreadsheet_id, sheet_id)
     add_last_updated(service, spreadsheet_id, args.sport)
     # update_sheet_title(service, spreadsheet_id, sheet_id, args.sport)
-
-    # link to get salary for NFL main slate
-    # 'https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId=21&draftGroupId=22168'
 
 
 if __name__ == '__main__':
