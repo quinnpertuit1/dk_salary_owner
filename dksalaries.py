@@ -229,7 +229,7 @@ def get_dt_from_timestamp(timestamp_str):
     return datetime.datetime.fromtimestamp(timestamp / 1000)
 
 
-def get_largest_contest(contests, entry_fee, query=None, dt=datetime.datetime.today()):
+def get_largest_contest(contests, entry_fee, query=None, exclude=None, dt=datetime.datetime.today()):
     print("get_largest_contest(contests, {})".format(entry_fee))
     print(type(contests))
     print("contests size: {}".format(len(contests)))
@@ -242,7 +242,13 @@ def get_largest_contest(contests, entry_fee, query=None, dt=datetime.datetime.to
             if c['mec'] == 1:
                 # match the entry fee
                 if c['a'] == entry_fee:
+                    # if exclude is in the name, skip it
+                    if exclude:
+                        if exclude in c['n']:
+                            continue
+
                     if query:
+                        # if query is in the name, add it to the list
                         if query in c['n']:
                             ls.append(c)
                     else:
@@ -321,6 +327,8 @@ def main():
         '-l', '--live', action='store_true', help='Get live contests')
     parser.add_argument(
         '-q', '--query', help='Search contest name')
+    parser.add_argument(
+        '-x', '--exclude', help='Exclude from search')
     args = parser.parse_args()
 
     live = ''
@@ -334,10 +342,16 @@ def main():
     if args.query:
         query = args.query
 
+    # set exclude if there is an argument
+    exclude = None
+    if args.exclude:
+        exclude = args.exclude
+
     # set cookies based on Chrome session
     COOKIES = browsercookie.chrome()
     URL = "https://www.draftkings.com/lobby/get{0}contests?sport={1}".format(
         live, args.sport)
+    print(URL)
     HEADERS = {
         'Accept': '*/*',
         'Accept-Encoding': 'gzip, deflate, sdch',
@@ -374,13 +388,13 @@ def main():
     contests = [
         # get_largest_contest(response_contests, 3, query),
         # get_largest_contest(response_contests, 4, query),
-        get_largest_contest(response_contests, 25, query)
+        get_largest_contest(response_contests, 25, query, exclude)
     ]
 
     for contest in contests:
-        # print("---------------")
-        # print(contest)
-        # print("---------------")
+        print("---------------")
+        print(contest)
+        print("---------------")
         date_time = get_pst_from_timestamp(contest['sd'])
         start_dt = get_dt_from_timestamp(contest['sd'])
         print("name: {}".format(contest['n']))
