@@ -50,7 +50,7 @@ def cj_from_cookies_json(working_cookies):
                                 r_cookie.name, now - cookie_expiration, cookie_expiration, now))
                 # some cookies have unnecessarily long expiration times which produce overflow errors
                 except OverflowError as e:
-                    logger.info("Overflow on {} [{}]".format(r_cookie.name, e))
+                    logger.debug("Overflow on {} [{}]".format(r_cookie.name, e))
 
                 # add cookie to cookiejar
                 cj.set_cookie(r_cookie)

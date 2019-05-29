@@ -292,6 +292,10 @@ def print_cron_string(contest, sport, start_dt):
         sport_length = 8
         dl_interval = '3-59/30'
         get_interval = '3-59/15'
+    elif sport == 'TEN':
+        sport_length = 8
+        dl_interval = '4-59/30'
+        get_interval = '4-59/15'
 
     # add about how long the slate should be
     end_dt = start_dt + datetime.timedelta(hours=sport_length)
@@ -321,8 +325,8 @@ def main():
     # parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '-s', '--sport', choices=['NBA', 'NFL', 'CFB', 'GOLF', 'NHL', 'MLB'],
-        required=True, help='Type of contest (NBA, NFL, GOLF, CFB, NHL, or MLB)')
+        '-s', '--sport', choices=['NBA', 'NFL', 'CFB', 'GOLF', 'NHL', 'MLB', 'TEN'],
+        required=True, help='Type of contest (NBA, NFL, GOLF, CFB, NHL, MLB, or TEN)')
     parser.add_argument(
         '-l', '--live', action='store_true', help='Get live contests')
     parser.add_argument(

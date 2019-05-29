@@ -55,8 +55,9 @@ def main():
 
     # parse arguments
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument('-s', '--sport', choices=['NBA', 'NFL', 'CFB', 'PGA', 'NHL', 'MLB'],
-                            required=True, help='Type of contest (NBA, NFL, PGA, CFB, NHL, or MLB)')
+    choices = ['NBA', 'NFL', 'CFB', 'PGA', 'NHL', 'MLB', 'TEN']
+    arg_parser.add_argument('-s', '--sport', choices=choices, required=True,
+                            help='Type of contest (NBA, NFL, PGA, CFB, NHL, or MLB)')
     arg_parser.add_argument('-dg', '--draft_group', type=int,
                             required=True, help='Draft Group ID')
     arg_parser.add_argument('-f', '--filename', help='Output filename')
@@ -67,7 +68,8 @@ def main():
         'SOC': 10,
         'MLB': 12,
         'NFL': 21,
-        'NBA': 70
+        'NBA': 70,
+        'TEN': 106
     }
 
     if args.sport:
