@@ -14,6 +14,6 @@ gspread = "*"
 python-dateutil = "*"
 pytz = "*"
 nba-api = "*"
-browsercookie = {path = "/home/pi/Downloads/browsercookie-0.7.5"}
+browsercookie = {path = "/home/pi/Downloads/richardpenman-browsercookie-aab350c45967"}
 
 [dev-packages]
