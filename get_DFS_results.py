@@ -3,6 +3,7 @@ import argparse
 import csv
 import io
 import json
+import logging
 import pickle
 import requests
 # from unidecode import unidecode
@@ -12,7 +13,7 @@ from os import path
 # from datetime import datetime
 import datetime
 
-from http.cookiejar import CookieJar
+# from http.cookiejar import CookieJar
 # from pprint import pprint
 # from bs4 import BeautifulSoup
 import browsercookie
@@ -21,25 +22,8 @@ from googleapiclient.discovery import build
 from httplib2 import Http
 from oauth2client import file, client, tools
 
-# If modifying these scopes, delete the file token.json.
-# SCOPES = 'https://www.googleapis.com/auth/spreadsheets.readonly'
 
-
-# def strip_accents(text):
-# u = str(text, 'utf-8')
-# convert utf-8 to normal text
-# return unidecode.unidecode(u)
-# try:
-#     text = unicode(text, 'utf-8')
-# except NameError:  # unicode is a default on python 3
-#     pass
-# text = unicodedata.normalize('NFD', text)
-# text = text.encode('ascii', 'ignore')
-# text = text.decode("utf-8")
-# return str(text)
-# def strip_accents(s):
-#     return ''.join(c for c in unicodedata.normalize('NFD', s)
-#                    if unicodedata.category(c) != 'Mn')
+logger = logging.getLogger(__name__)
 
 
 class EST5EDT(datetime.tzinfo):
@@ -69,55 +53,6 @@ def strip_accents(s):
     """Strip accents from a given string and replace with letters without accents."""
     return ''.join(c for c in unicodedata.normalize('NFD', s)
                    if unicodedata.category(c) != 'Mn')
-
-
-# def pull_dk_contests(reload=False):
-#     ENDPOINT = 'https://www.draftkings.com/mycontests'
-#     filename = 'my_contests.html'
-#
-#     # pull data
-#     soup = pull_soup_data(filename, ENDPOINT)
-#
-#     # find script(s) in the html
-#     script = soup.findAll('script')
-#
-#     # for i, s in enumerate(script):
-#     #     print("{}: {}".format(i, s))
-#     js_contest_data = script[133].string
-#
-#     # pull json object from data variable
-#     # pattern = re.compile(r'data = (.*);')
-#     pattern = re.compile(r'upcoming: (.*),')
-#     json_str = pattern.search(js_contest_data).group(1)
-#     contest_json = json.loads(json_str)
-#
-#     bool_quarters = False
-#     now = datetime.datetime.now()
-#     # iterate through json
-#     for contest in contest_json:
-#         # print(contest)
-#         id = contest['ContestId']
-#         name = contest['ContestName']
-#         buyin = contest['BuyInAmount']
-#         est_starttime = contest['ContestStartDateEdt']
-#         top_payout = contest['TopPayout']
-#         group_id = contest['DraftGroupId']
-#         game_type = contest['GameTypeId']
-#
-#         # only print quarters contests ServiceAccountCredentials
-#         if buyin == 0.25:
-#             if bool_quarters:
-#                 continue
-#             else:
-#                 bool_quarters = True
-#
-#         dt_starttime = parser.parse(est_starttime)
-#         time_until = dt_starttime - now
-#
-#         print("ID: {} buyin: {} payout: {} est_startime: {} starts in: {} [{}]".format(
-#             id, buyin, top_payout, est_starttime, time_until, name))
-#         print("group_id: {} game_type: {}".format(group_id, game_type))
-#         print("https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId={}&draftGroupId={}".format(game_type, group_id))
 
 
 # def pull_soup_data(filename, ENDPOINT):
@@ -168,6 +103,172 @@ def pull_salary_csv(filename, csv_url):
         return my_list
 
 
+def cj_from_cookies_json(working_cookies):
+    filename = 'cookies.json'
+
+    # create empty cookie jar
+    cj = requests.cookies.RequestsCookieJar()
+
+    now = datetime.datetime.now()
+    with open(filename) as f:
+        cookies = json.load(f)
+        for c in cookies:
+            if c['name'] in working_cookies:
+                # logger.info("found {} in working_cookies".format(c['name']))
+
+                # some (one?) cookies do not have an expirationDate
+                if 'expirationDate' not in c:
+                    logger.debug('{} has no expirationDate'.format(c['name']))
+                    c['expirationDate'] = None
+
+                # create cookie object
+                r_cookie = requests.cookies.create_cookie(
+                    name=c['name'],
+                    value=c['value'],
+                    domain=c['domain'],
+                    path=c['path'],
+                    expires=c['expirationDate']
+                )
+
+                # logger.debug("name: {} expires: {}".format(
+                #     r_cookie.name, r_cookie.expires))
+
+                try:
+                    if r_cookie.expires:
+                        cookie_expiration = datetime.datetime.fromtimestamp(
+                            r_cookie.expires)
+                        diff = cookie_expiration - now
+                        if diff.total_seconds() >= 0:
+                            logger.info("c.name {} expires soon. difference: {} (c.expires: {} now: {})".format(
+                                r_cookie.name, diff, cookie_expiration, now))
+                        else:
+                            logger.info("c.name {} EXPIRED {} ago (c.expires: {} now: {})".format(
+                                r_cookie.name, now - cookie_expiration, cookie_expiration, now))
+                # some cookies have unnecessarily long expiration times which produce overflow errors
+                except OverflowError as e:
+                    logger.info("Overflow on {} [{}]".format(r_cookie.name, e))
+
+                # add cookie to cookiejar
+                cj.set_cookie(r_cookie)
+
+    return cj
+
+
+def cj_from_pickle(filename):
+    try:
+        with open(filename, 'rb') as f:
+            return pickle.load(f)
+    except FileNotFoundError as e:
+        logger.error("File {} not found [{}]".format(filename, e))
+        return False
+
+
+def setup_session(contest_csv_url, cookies):
+    s = requests.Session()
+    now = datetime.datetime.now()
+
+    for c in cookies:
+        # if the cookies already exists from a legitimate fresh session, clear them out
+        if c.name in s.cookies:
+            logger.debug("removing {} from 'cookies' -- ".format(c.name), end='')
+            cookies.clear(c.domain, c.path, c.name)
+        else:
+            if not c.expires:
+                continue
+
+            try:
+                if c.expires <= now.timestamp():
+                    logger.debug("c.name {} has EXPIRED!!! (c.expires: {} now: {})".format(
+                        c.name, datetime.datetime.fromtimestamp(c.expires), now))
+                else:  # check if
+                    delta_hours = 5
+                    d = datetime.datetime.fromtimestamp(
+                        c.expires) - datetime.timedelta(hours=delta_hours)
+                    # within 5 hours
+                    if d <= now:
+                        logger.debug("c.name {} expires within {} hours!! difference: {} (c.expires: {} now: {})".format(
+                            c.name, delta_hours, datetime.datetime.fromtimestamp(c.expires) - now, datetime.datetime.fromtimestamp(c.expires), now))
+            # some cookies have unnecessarily long expiration times which produce overflow errors
+            except OverflowError as e:
+                logger.info("Overflow on {} {} [error: {}]".format(c.name, c.expires, e))
+
+    # exit()
+    logger.debug("adding all missing cookies to session.cookies")
+    # print(cookies)
+    s.cookies.update(cookies)
+
+    return request_contest_url(s, contest_csv_url)
+
+
+def request_contest_url(s, contest_csv_url):
+    # attempt to GET contest_csv_url
+    r = s.get(contest_csv_url)
+    logger.debug(r.status_code)
+    logger.debug(r.url)
+    logger.debug(r.headers['Content-Type'])
+    # print(r.headers)
+    if 'text/html' in r.headers['Content-Type']:
+        # write broken cookies
+        with open('pickled_cookies_broken.txt', 'wb') as f:
+            pickle.dump(s.cookies, f)
+
+        logger.info('We cannot do anything with html!')
+        return False
+    # if headers say file is a CSV file
+    elif r.headers['Content-Type'] == 'text/csv':
+
+        # write working cookies
+        with open('pickled_cookies_works.txt', 'wb') as f:
+            pickle.dump(s.cookies, f)
+        # decode bytes into string
+        csvfile = r.content.decode('utf-8')
+        # open reader object on csvfile
+        rdr = csv.reader(csvfile.splitlines(), delimiter=',')
+        # return list
+        return list(rdr)
+    else:
+        # write working cookies
+        with open('pickled_cookies_works.txt', 'wb') as f:
+            pickle.dump(s.cookies, f)
+
+        # request will be a zip file
+        z = zipfile.ZipFile(io.BytesIO(r.content))
+        for name in z.namelist():
+            # extract file - it seems easier this way
+            z.extract(name)
+            with z.open(name) as csvfile:
+                logger.debug("name within zipfile: {}".format(name))
+                # convert to TextIOWrapper object
+                lines = io.TextIOWrapper(csvfile, encoding='utf-8', newline='\r\n')
+                # open reader object on csvfile within zip file
+                rdr = csv.reader(lines, delimiter=',')
+                return list(rdr)
+
+
+def text_cookie_issue():
+    # create/check file for date
+    filename = 'last_text_time.txt'
+    now = datetime.datetime.now()
+
+    if path.isfile(filename):
+        with open(filename, 'r+') as f:
+            last_time = f.read()
+            last_time_dt = datetime.datetime.strptime(last_time, '%Y-%m-%d %H:%M:%S.%f')
+            logger.debug("Last text time: {}".format(last_time_dt))
+
+            # if it has been less than an hour, don't text
+            if now - last_time_dt < datetime.timedelta(minutes=30):
+                logger.debug("It has only been: {} ".format(now - last_time_dt))
+            else:
+                logger.debug("it has been more than the cutoff! {} ".format(
+                    now - last_time_dt))
+                logger.debug("texting adam!")
+    else:
+        with open(filename, 'w+') as f:
+            logger.debug("Writing now(): {}".format(now))
+            f.write("{}".format(now))
+
+
 def pull_contest_zip(filename, contest_id):
     """Pull contest file (so far can be .zip or .csv file)."""
     contest_csv_url = "https://www.draftkings.com/contest/exportfullstandingscsv/{0}".format(
@@ -184,13 +285,49 @@ def pull_contest_zip(filename, contest_id):
     # s = requests.Session()
     # r = s.get(contest_csv_url, cookies=cookies)
 
-    # trying load pickle cookie method
-    s = requests.Session()
-    s.get('https://www.draftkings.com/')
+    # try pickle cookies method
+    cookies = cj_from_pickle('pickled_cookies_works.txt')
+    if cookies:
+        result = setup_session(contest_csv_url, cookies)
 
-    cookies = ''
-    with open('pickled_cookies_works.txt', 'rb') as f:
-        cookies = pickle.load(f)
+        logger.debug("type(result): {}".format(type(result)))
+        if result is False:
+            logger.debug("Broken from pickle method")
+        else:
+            logger.debug("pickle method worked!!")
+            return result
+
+    # try browsercookie method
+    cookies = browsercookie.chrome()
+
+    for c in cookies:
+        if 'draft' not in c.domain:
+            logger.debug("Clearing {} {} {} ".format(c.domain, c.path, c.name))
+            cookies.clear(c.domain, c.path, c.name)
+        else:
+            if c.expires:
+                # chrome is ridiculous - this math is required
+                # Devide the actual timestamp (in my case it's expires_utc column in cookies table) by 1000000 // And someone should explain my why.
+                # Subtract 11644473600
+                # DONE! Now you got UNIX timestamp
+                new_expiry = c.expires / 1000000
+                new_expiry -= 11644473600
+                c.expires = new_expiry
+
+    result = setup_session(contest_csv_url, cookies)
+    logger.debug("type(result): {}".format(type(result)))
+
+    if result is False:
+        exit("Broken from browsercookie method")
+    else:
+        logger.debug("browsercookie method worked!!")
+        return result
+
+    # try browsercookie method
+    #
+
+    # trying load pickle cookie method
+    # s.get('https://www.draftkings.com/')
 
     # with open('cookies.json') as f:
     #     cookies = json.load(f)
@@ -198,110 +335,12 @@ def pull_contest_zip(filename, contest_id):
     #         if c['name'] in s.cookies:
     #             print("removing {} from 'cookies' -- ".format(c.name), end='')
     #             cookies.clear(c.domain, c.path, c.name)
-    # exit()
+
     #         else:
     #             print("did not find {} in s.cookies".format(c['name']))
     #             cookie = requests.cookies.create_cookie(
     #                 name=c['name'], value=c['value'], domain=c['domain'], path=c['path'], secure=c['secure'])
     #             s.cookies.set_cookie(cookie)
-
-    now = datetime.datetime.now()
-
-    for c in cookies:
-        # if the cookies already exists from a legitimate fresh session, clear them out
-        if c.name in s.cookies:
-            # print("removing {} from 'cookies' -- ".format(c.name), end='')
-            cookies.clear(c.domain, c.path, c.name)
-        else:
-            # print(datetime.datetime(1970, 1, 1) + datetime.timedelta(seconds=c.expires))
-            # print("c.name {} expires: {}".format(c.name, c.expires))
-            if not c.expires:
-                continue
-
-            if c.expires <= now.timestamp():
-                print("c.name {} has EXPIRED!!! (c.expires: {} now: {})".format(
-                    c.name, datetime.datetime.fromtimestamp(c.expires), now))
-            else:  # check if
-                delta_hours = 5
-                d = datetime.datetime.fromtimestamp(
-                    c.expires) - datetime.timedelta(hours=delta_hours)
-                # within 5 hours
-                if d <= now:
-                    print("c.name {} expires within {} hours!! difference: {} (c.expires: {} now: {})".format(
-                        c.name, delta_hours, datetime.datetime.fromtimestamp(c.expires) - now, datetime.datetime.fromtimestamp(c.expires), now))
-
-    # exit()
-    print("adding all missing cookies to session.cookies")
-    print(cookies)
-    s.cookies.update(cookies)
-
-    r = s.get(contest_csv_url)
-    print(r.status_code)
-    print(r.url)
-
-    # new method
-    # with open('cookies.json') as f:
-    #     cookies = json.load(f)
-    #     for c in cookies:
-    #         if c['name'] in s.cookies:
-    #             print("found {} in s.cookies".format(c['name']))
-    #         else:
-    #             print("did not find {} in s.cookies".format(c['name']))
-    #             cookie = requests.cookies.create_cookie(
-    #                 name=c['name'], value=c['value'], domain=c['domain'], path=c['path'], secure=c['secure'])
-    #             s.cookies.set_cookie(cookie)
-
-    # r = s.get(contest_csv_url)
-    # r = s.get
-
-    # print("r.cookies")
-    # for c in r.cookies:
-    #     print("c.name: {} c.expires: {}".format(c.name, c.expires))
-    # # print()
-    # # print("s.session.cookies")
-    # print("--------------------")
-    # print("s.cookies")
-    # for c in s.cookies:
-    #     print("c.name: {} c.expires: {}".format(c.name, c.expires))
-    #     # print(type(c))
-    # print("--------------------")
-
-    print(r.headers)
-    # if headers say file is a CSV file
-    if r.headers['Content-Type'] == 'text/csv':
-        # write working cookies
-        with open('pickled_cookies_works.txt', 'wb') as f:
-            pickle.dump(s.cookies, f)
-
-        # decode bytes into string
-        csvfile = r.content.decode('utf-8')
-        # open reader object on csvfile
-        rdr = csv.reader(csvfile.splitlines(), delimiter=',')
-        # return list
-        return list(rdr)
-    elif 'text/html' in r.headers['Content-Type']:
-        # print(r)
-        # write broken cookies
-        with open('pickled_cookies_broken.txt', 'wb') as f:
-            pickle.dump(s.cookies, f)
-        exit('We cannot do anything with html!')
-    else:
-        # write working cookies
-        with open('pickled_cookies_works.txt', 'wb') as f:
-            pickle.dump(s.cookies, f)
-        # request will be a zip file
-        z = zipfile.ZipFile(io.BytesIO(r.content))
-
-        for name in z.namelist():
-            # extract file - it seems easier this way
-            z.extract(name)
-            with z.open(name) as csvfile:
-                print("name within zipfile: {}".format(name))
-                # convert to TextIOWrapper object
-                lines = io.TextIOWrapper(csvfile, encoding='utf-8', newline='\r\n')
-                # open reader object on csvfile within zip file
-                rdr = csv.reader(lines, delimiter=',')
-                return list(rdr)
 
 
 def add_header_format(service, spreadsheet_id, sheet_id):
@@ -343,11 +382,11 @@ def add_header_format(service, spreadsheet_id, sheet_id):
             'fields': 'gridProperties.frozenRowCount'
         }
     }]
-    print('Applying header to sheet')
+    logger.info('Applying header to sheet')
     batch_update_sheet(service, spreadsheet_id, requests)
 
 
-def add_column_number_format(service, spreadsheet_id, sheet_id):
+def add_col_num_fmt(service, spreadsheet_id, sheet_id):
     """Format each specified column with explicit number format."""
     range_ownership = {
         'sheetId': sheet_id,
@@ -410,7 +449,7 @@ def add_column_number_format(service, spreadsheet_id, sheet_id):
             'fields': 'userEnteredFormat.numberFormat'
         }
     }]
-    print('Applying column number format(s)')
+    logger.info('Applying column number format(s)')
     batch_update_sheet(service, spreadsheet_id, requests)
 
 
@@ -498,7 +537,7 @@ def add_cond_format_rules(service, spreadsheet_id, sheet_id):
             'index': 0
         }
     }]
-    print("Applying conditional formatting to sheet_id {}".format(sheet_id))
+    logger.info("Applying conditional formatting to sheet_id {}".format(sheet_id))
     batch_update_sheet(service, spreadsheet_id, requests)
 
 
@@ -516,7 +555,7 @@ def add_last_updated(service, spreadsheet_id, title):
     result = service.spreadsheets().values().update(
         spreadsheetId=spreadsheet_id, range=range,
         valueInputOption=value_input_option, body=body).execute()
-    print('{0} cells updated.'.format(result.get('updatedCells')))
+    logger.debug('{0} cells updated.'.format(result.get('updatedCells')))
 
 
 def update_sheet_title(service, spreadsheet_id, title):
@@ -537,7 +576,7 @@ def batch_update_sheet(service, spreadsheet_id, requests):
     }
     response = service.spreadsheets().batchUpdate(
         spreadsheetId=spreadsheet_id, body=body).execute()
-    print('{0} cells updated.'.format(len(response.get('replies'))))
+    logger.debug('{0} cells updated.'.format(len(response.get('replies'))))
 
 
 def append_row(service, spreadsheet_id, range_name, values):
@@ -549,9 +588,9 @@ def append_row(service, spreadsheet_id, range_name, values):
     result = service.spreadsheets().values().append(
         spreadsheetId=spreadsheet_id, range=range_name,
         valueInputOption=value_input_option, body=body).execute()
-    print('{0} cells appended.'.format(result
-                                       .get('updates')
-                                       .get('updatedCells')))
+    logger.info('{0} cells appended.'.format(result
+                                             .get('updates')
+                                             .get('updatedCells')))
 
 
 def write_row(service, spreadsheet_id, range_name, values):
@@ -563,7 +602,7 @@ def write_row(service, spreadsheet_id, range_name, values):
     result = service.spreadsheets().values().update(
         spreadsheetId=spreadsheet_id, range=range_name,
         valueInputOption=value_input_option, body=body).execute()
-    print('{0} cells updated.'.format(result.get('updatedCells')))
+    logger.debug('{0} cells updated.'.format(result.get('updatedCells')))
 
 
 def find_sheet_id(service, spreadsheet_id, title):
@@ -571,7 +610,8 @@ def find_sheet_id(service, spreadsheet_id, title):
     sheets = sheet_metadata.get('sheets', '')
     for sheet in sheets:
         if title in sheet['properties']['title']:
-            print("Sheet ID for {} is {}".format(title, sheet['properties']['sheetId']))
+            logger.debug("Sheet ID for {} is {}".format(
+                title, sheet['properties']['sheetId']))
             return sheet['properties']['sheetId']
     # title = sheets[0].get("properties", {}).get("title", "Sheet1")
     # sheet_id = sheets[0].get("properties", {}).get("sheetId", 0)
@@ -581,10 +621,11 @@ def find_sheet_id(service, spreadsheet_id, title):
 
 def get_matchup_info(game_info, team_abbv):
     # wth is this?
-    if game_info in ['In Progress', 'Final', 'UNKNOWN']:
+    if game_info in ['In Progress', 'Final', 'Postponed', 'UNKNOWN']:
         return game_info
 
     # split game info into matchup_info
+    # logger.debug(game_info)
     home_team, away_team = game_info.split(' ', 1)[0].split('@')
     if team_abbv == home_team:
         matchup_info = "vs. {}".format(away_team)
@@ -657,6 +698,14 @@ def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
         end_indices = [indices[i] for i in range(1, len(indices))]
         # append size of splt as last index
         end_indices.append(len(splt))
+    elif sport == 'TEN':
+        positions = ['P']
+        # list comp for indicies of positions in splt
+        indices = [i for i, pos in enumerate(splt) if pos in positions]
+        # list comp for ending indices in splt. for splicing, the second argument is exclusive
+        end_indices = [indices[i] for i in range(1, len(indices))]
+        # append size of splt as last index
+        end_indices.append(len(splt))
 
     pts = 0
     value = 0
@@ -697,8 +746,20 @@ def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
                 'salary': salary,
                 'matchup_info': matchup_info
             }
-        elif 'PGA' in sport:
-            # because PGA has all 'G', create a list rather than a dictionary
+        elif sport == 'TEN':
+            if pos not in results:
+                results[pos] = []
+
+            results[pos].append({
+                'name': name,
+                'pts': pts,
+                'value': value,
+                'perc': perc,
+                'salary': salary,
+                'matchup_info': matchup_info
+            })
+        elif 'PGA' or 'TEN' in sport:
+            # because PGA has all 'G' , create a list rather than a dictionary
             if pos not in results:
                 results[pos] = []
 
@@ -819,6 +880,19 @@ def write_PGA_lineup(lineup, bro):
     return values
 
 
+def write_TEN_lineup(lineup, bro):
+    values = [
+        [bro, '', 'PMR', lineup['pmr'], '', ''],
+        ['Position', 'Player', 'Salary', 'Pts', 'Value', 'Own']
+    ]
+    if 'P' in lineup:
+        for p in lineup['P']:
+            values.append(['P', p['name'], p['salary'], p['pts'], p['value'], p['perc']])
+
+    values.append(['rank', lineup['rank'], '', lineup['points'], '', ''])
+    return values
+
+
 def write_NFL_lineup(lineup, bro):
     values = [
         [bro, '', 'PMR', lineup['pmr']],
@@ -923,7 +997,7 @@ def write_MLB_lineup(lineup, bro):
 
 
 def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
-    print("Sport == {} - trying to write_lineup()..".format(sport))
+    logger.debug("Sport == {} - trying to write_lineup()..".format(sport))
     # pre-defined google sheet lineup ranges
     # range 1 K3:N15  range 5: Q3:U15
     # range 2 K15:N25 range 6: Q15:U25
@@ -967,7 +1041,7 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
             # append an empty list for spacing
             ultimate_list.append([])
         r = "{}!J3:V54".format(sport)
-        print("trying to write all lineups to [{}]".format(r))
+        logger.debug("trying to write all lineups to [{}]".format(r))
         write_row(service, spreadsheet_id, r, ultimate_list)
     elif 'PGA' in sport:
         # for i, (k, v) in enumerate(sorted(lineup.items())):
@@ -985,27 +1059,43 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
         #     ultimate_list.append([])
         ultimate_list = build_lineup_list(lineup, sport)
         r = "{}!J3:V54".format(sport)
-        print("trying to write all lineups to [{}]".format(r))
+        logger.debug("trying to write all lineups to [{}]".format(r))
+        write_row(service, spreadsheet_id, r, ultimate_list)
+    elif sport == 'TEN':
+        for i, (k, v) in enumerate(sorted(lineup.items())):
+            # print("i: {} K: {}\nv:{}".format(i, k, v))
+            ten_mod = 9
+            values = write_TEN_lineup(v, k)
+            for j, z in enumerate(values):
+                if i < lineup_mod:
+                    ultimate_list.append(z)
+                elif i >= lineup_mod:
+                    mod = (i % lineup_mod) + ((i % lineup_mod) * ten_mod) + j
+                    ultimate_list[mod].extend([''] + z)
+            # append an empty list for spacing
+            ultimate_list.append([])
+        r = "{}!J3:V54".format(sport)
+        logger.debug("trying to write all lineups to [{}]".format(r))
         write_row(service, spreadsheet_id, r, ultimate_list)
     elif sport == 'NFL':
         for i, (k, v) in enumerate(sorted(lineup.items())):
             # print("i: {} K: {}\nv:{}".format(i, k, v))
             values = write_NFL_lineup(v, k)
-            print("trying to write line [{}] to {}".format(k, NFL_ranges[i]))
+            logger.debug("trying to write line [{}] to {}".format(k, NFL_ranges[i]))
             # print(values)
             write_row(service, spreadsheet_id, NFL_ranges[i], values)
     elif sport == 'CFB':
         for i, (k, v) in enumerate(sorted(lineup.items())):
             # print("i: {} K: {}\nv:{}".format(i, k, v))
             values = write_CFB_lineup(v, k)
-            print("trying to write line [{}] to {}".format(k, ranges[i]))
+            logger.debug("trying to write line [{}] to {}".format(k, ranges[i]))
             # print(values)
             write_row(service, spreadsheet_id, ranges[i], values)
     elif sport == 'NHL':
         for i, (k, v) in enumerate(sorted(lineup.items())):
             # print("i: {} K: {}\nv:{}".format(i, k, v))
             values = write_NHL_lineup(v, k)
-            print("trying to write line [{}] to {}".format(k, NFL_ranges[i]))
+            logger.debug("trying to write line [{}] to {}".format(k, NFL_ranges[i]))
             # print(values)
             write_row(service, spreadsheet_id, NFL_ranges[i], values)
     elif sport == 'MLB':
@@ -1021,17 +1111,19 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
             # append an empty list for spacing
             ultimate_list.append([])
         r = "{}!J3:V57".format(sport)
-        print("trying to write all lineups to [{}]".format(r))
+        logger.debug("trying to write all lineups to [{}]".format(r))
         write_row(service, spreadsheet_id, r, ultimate_list)
 
 
 def build_lineup_list(lineup, sport):
-    print("build_lineup_list(lineup, {})".format(sport))
+    logger.debug("build_lineup_list(lineup, {})".format(sport))
     ultimate_list = []
     sport_mod = 1
     lineup_mod = 4
 
     if 'PGA' in sport:
+        sport_mod = 9
+    elif 'TEN' in sport:
         sport_mod = 9
 
     for i, (k, v) in enumerate(sorted(lineup.items())):
@@ -1090,13 +1182,6 @@ def read_salary_csv(fn):
 #     return name
 
 
-def text_adam_cookie_issue():
-    # create/check file for date
-
-    # send message
-    pass
-
-
 def main():
     """Use contest ID to update Google Sheet with DFS results.
 
@@ -1107,18 +1192,23 @@ def main():
     https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId=70&draftGroupId=22401
     12 = MLB 21 = NFL 9 = PGA 24 = NASCAR 10 = Soccer 13 = MMA
     """
+
+    # text_cookie_issue()
+
     # parse arguments
     parser = argparse.ArgumentParser()
+    choices = ['NBA', 'NFL', 'CFB', 'PGAMain',
+               'PGAWeekend', 'PGAShowdown', 'NHL', 'MLB', 'TEN']
     parser.add_argument('-i', '--id', type=int, required=True,
                         help='Contest ID from DraftKings',)
     parser.add_argument('-c', '--csv', help='Slate CSV from DraftKings',)
-    parser.add_argument('-s', '--sport', choices=['NBA', 'NFL', 'CFB', 'PGAMain', 'PGAWeekend', 'PGAShowdown', 'NHL', 'MLB'],
+    parser.add_argument('-s', '--sport', choices=choices,
                         required=True, help='Type of contest (NBA, NFL, PGA, CFB, NHL, or MLB)')
     parser.add_argument('-v', '--verbose', help='Increase verbosity')
     args = parser.parse_args()
 
     now = datetime.datetime.now()
-    print("Current time: {}".format(now))
+    logger.info("Current time: {}".format(now))
 
     dir = '/home/pi/Desktop/dk_salary_owner'
     # set the filename for the salary CSV
@@ -1129,6 +1219,8 @@ def main():
 
     contest_id = args.id
     sport = args.sport
+
+    logger.debug(args)
 
     # read salary CSV
     salary_dict = read_salary_csv(fn)
@@ -1152,7 +1244,7 @@ def main():
 
         # find lineup for friends
         if name in bros:
-            print("found bro {}".format(name))
+            logger.info("found bro {}".format(name))
             bro_lineups[name] = {
                 'rank': rank,
                 'lineup': lineup,
@@ -1209,19 +1301,19 @@ def main():
     for bro, v in bro_lineups.items():
         parsed_lineup[bro] = parse_lineup(
             sport, v['lineup'], v['points'], v['pmr'], v['rank'], player_dict)
-        print(parsed_lineup[bro])
+        logger.debug("{} {}".format(bro, parsed_lineup[bro]))
 
     # call the Sheets API
     spreadsheet_id = '1Jv5nT-yUoEarkzY5wa7RW0_y0Dqoj8_zDrjeDs-pHL4'
     RANGE_NAME = "{}!A2:S".format(args.sport)
     sheet_id = find_sheet_id(service, spreadsheet_id, args.sport)
 
-    print('Starting write_row')
+    logger.debug('Starting write_row')
     write_row(service, spreadsheet_id, RANGE_NAME, values)
     if parsed_lineup:
-        print('Writing lineup')
+        logger.info('Writing lineup')
         write_lineup(service, spreadsheet_id, sheet_id, parsed_lineup, args.sport)
-    add_column_number_format(service, spreadsheet_id, sheet_id)
+    add_col_num_fmt(service, spreadsheet_id, sheet_id)
     add_header_format(service, spreadsheet_id, sheet_id)
     # add_cond_format_rules(service, spreadsheet_id, sheet_id)
     add_last_updated(service, spreadsheet_id, args.sport)
@@ -1229,4 +1321,14 @@ def main():
 
 
 if __name__ == '__main__':
+    logger.setLevel(logging.DEBUG)
+    # formatter = logging.Formatter(fmt='%(asctime)s %(funcName)11s %(levelname)5s %(message)s',
+    #                               datefmt='%Y-%m-%d %H:%M:%S')
+    formatter = logging.Formatter(fmt='%(asctime)s %(funcName)20s %(levelname)5s %(message)s',
+                                  datefmt='%Y-%m-%d %H:%M:%S')
+    # configure and add stream handler
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
     main()
