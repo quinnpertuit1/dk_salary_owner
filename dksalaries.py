@@ -229,7 +229,7 @@ def get_dt_from_timestamp(timestamp_str):
     return datetime.datetime.fromtimestamp(timestamp / 1000)
 
 
-def get_largest_contest(contests, entry_fee, query=None, exclude=None, dt=datetime.datetime.today()):
+def get_largest_contest(contests, entry_fee=25, query=None, exclude=None, dt=datetime.datetime.today()):
     print("get_largest_contest(contests, {})".format(entry_fee))
     print(type(contests))
     print("contests size: {}".format(len(contests)))
@@ -285,7 +285,7 @@ def print_cron_string(contest, sport, start_dt):
         dl_interval = "*/10"
         get_interval = "*/5"
     elif sport == 'MLB':
-        sport_length = 5
+        sport_length = 6
         dl_interval = '1-59/15'
         get_interval = '1-59/10'
     elif sport == 'PGA':
@@ -293,9 +293,9 @@ def print_cron_string(contest, sport, start_dt):
         dl_interval = '3-59/30'
         get_interval = '3-59/15'
     elif sport == 'TEN':
-        sport_length = 8
-        dl_interval = '4-59/30'
-        get_interval = '4-59/15'
+        sport_length = 15
+        dl_interval = '4-59/15'
+        get_interval = '4-59/10'
 
     # add about how long the slate should be
     end_dt = start_dt + datetime.timedelta(hours=sport_length)
@@ -308,8 +308,11 @@ def print_cron_string(contest, sport, start_dt):
         days = "{}".format(start_dt.strftime('%d'))
     else:
         print("dates are not the same - that means end_dt extends into the next day")
-        hours = "00-{},{}-23".format(end_dt.strftime('%H'),
-                                     start_dt.strftime('%H'))
+        # don't double print 00s
+        if end_dt.strftime('%H') == '00':
+            hours = "{},{}-23".format(end_dt.strftime('%H'), start_dt.strftime('%H'))
+        else:
+            hours = "00-{},{}-23".format(end_dt.strftime('%H'), start_dt.strftime('%H'))
         days = "{}-{}".format(start_dt.strftime('%d'), end_dt.strftime('%d'))
 
     cron_str = "{0} {1} {2} *".format(hours, days, end_dt.strftime('%m'))
@@ -330,6 +333,8 @@ def main():
     parser.add_argument(
         '-l', '--live', action='store_true', help='Get live contests')
     parser.add_argument(
+        '-e', '--entry', type=int, default=25, help='Entry fee (25 for $25)')
+    parser.add_argument(
         '-q', '--query', help='Search contest name')
     parser.add_argument(
         '-x', '--exclude', help='Exclude from search')
@@ -340,16 +345,6 @@ def main():
     if args.live:
         print("args.live is true")
         live = 'live'
-
-    # set query if there is an argument
-    query = None
-    if args.query:
-        query = args.query
-
-    # set exclude if there is an argument
-    exclude = None
-    if args.exclude:
-        exclude = args.exclude
 
     # set cookies based on Chrome session
     COOKIES = browsercookie.chrome()
@@ -392,7 +387,7 @@ def main():
     contests = [
         # get_largest_contest(response_contests, 3, query),
         # get_largest_contest(response_contests, 4, query),
-        get_largest_contest(response_contests, 25, query, exclude)
+        get_largest_contest(response_contests, args.entry, args.query, args.exclude)
     ]
 
     for contest in contests:
@@ -419,7 +414,7 @@ def main():
         if args.sport == 'GOLF':
             args.sport = 'PGA'
 
-        start_hour = start_dt.strftime('%H')
+        # start_hour = start_dt.strftime('%H')
         print("start: {}".format(start_dt))
 
         print_cron_string(contest, args.sport, start_dt)
