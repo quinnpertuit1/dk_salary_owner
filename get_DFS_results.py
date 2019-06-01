@@ -146,7 +146,7 @@ def cj_from_cookies_json(working_cookies):
                                 r_cookie.name, now - cookie_expiration, cookie_expiration, now))
                 # some cookies have unnecessarily long expiration times which produce overflow errors
                 except OverflowError as e:
-                    logger.info("Overflow on {} [{}]".format(r_cookie.name, e))
+                    logger.debug("Overflow on {} [{}]".format(r_cookie.name, e))
 
                 # add cookie to cookiejar
                 cj.set_cookie(r_cookie)
@@ -190,7 +190,7 @@ def setup_session(contest_csv_url, cookies):
                             c.name, delta_hours, datetime.datetime.fromtimestamp(c.expires) - now, datetime.datetime.fromtimestamp(c.expires), now))
             # some cookies have unnecessarily long expiration times which produce overflow errors
             except OverflowError as e:
-                logger.info("Overflow on {} {} [error: {}]".format(c.name, c.expires, e))
+                logger.debug("Overflow on {} {} [error: {}]".format(c.name, c.expires, e))
 
     # exit()
     logger.debug("adding all missing cookies to session.cookies")
@@ -621,23 +621,21 @@ def find_sheet_id(service, spreadsheet_id, title):
 
 def get_matchup_info(game_info, team_abbv):
     # wth is this?
-    if game_info in ['In Progress', 'Final', 'Postponed', 'UNKNOWN']:
+    # logger.debug(game_info)
+    if game_info in ['In Progress', 'Final', 'Postponed', 'UNKNOWN', 'Suspended']:
         return game_info
 
     # split game info into matchup_info
-    # logger.debug(game_info)
-    home_team, away_team = game_info.split(' ', 1)[0].split('@')
+    home_team, a = game_info.split('@')
+    away_team, match_time = a.split(' ', 1)
+    # logger.debug("home_team: {} away_team: {} t: {}".format(
+    #     home_team, away_team, match_time))
+    # home_team, away_team = game_info.split(' ', 1)[0].split('@')
     if team_abbv == home_team:
         matchup_info = "vs. {}".format(away_team)
     else:
         matchup_info = "at {}".format(home_team)
     return matchup_info
-
-
-def get_game_time_info(game_info):
-    if game_info in ['In Progress', 'Final', 'UNKNOWN']:
-        return game_info
-    return game_info.split(' ', 1)[1]
 
 
 def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
@@ -758,7 +756,7 @@ def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
                 'salary': salary,
                 'matchup_info': matchup_info
             })
-        elif 'PGA' or 'TEN' in sport:
+        elif 'PGA' in sport:
             # because PGA has all 'G' , create a list rather than a dictionary
             if pos not in results:
                 results[pos] = []
@@ -816,12 +814,11 @@ def parse_lineup(sport, lineup, points, pmr, rank, player_dict):
                     'salary': salary
                 }
         elif sport == 'MLB':
-            # print(results)
             # create a list for P/OF since there are multiple
             if pos == 'P' or pos == 'OF':
                 if pos not in results:
                     results[pos] = []
-                # append to RB/WR list
+                # append to P/OF list
                 results[pos].append({
                     'name': name,
                     'pts': pts,
@@ -1265,7 +1262,6 @@ def main():
                 team_abbv = salary_dict[name]['team_abbv']
                 game_info = salary_dict[name]['game_info']
                 matchup_info = get_matchup_info(game_info, team_abbv)
-                # game_time = get_game_time_info(game_info)
             else:
                 team_abbv = ''
                 matchup_info = ''
@@ -1287,8 +1283,12 @@ def main():
                 'value': value,
                 'matchup_info': matchup_info
             }
+            # logger.debug("player_dict[{}]['matchup_info']: {}".format(
+            #     name, player_dict[name]['matchup_info']))
             values.append([pos, name, team_abbv, matchup_info, salary, perc, pts, value])
 
+    # logger.debug("player_dict:")
+    # logger.debug(player_dict)
     # google sheets API boilerplate
     SCOPES = 'https://www.googleapis.com/auth/spreadsheets'
     store = file.Storage(path.join(dir, 'token.json'))
