@@ -1,22 +1,25 @@
 """Use contest ID to update Google Sheet with DFS results."""
 import argparse
 import csv
+import datetime
 import io
 import json
 import logging
 import pickle
 import requests
 # from unidecode import unidecode
+import time
 import unicodedata
 import zipfile
+
 from os import path
-# from datetime import datetime
-import datetime
 
 # from http.cookiejar import CookieJar
 # from pprint import pprint
 # from bs4 import BeautifulSoup
 import browsercookie
+
+from selenium import webdriver
 
 from googleapiclient.discovery import build
 from httplib2 import Http
@@ -275,13 +278,12 @@ def pull_contest_zip(filename, contest_id):
         contest_id)
 
     # cookies = browsercookie.chrome()
-
     # for c in cookies:
     #     if 'draft' not in c.domain:
     #         print("Clearing {} {} {} ".format(c.domain, c.path, c.name))
     #         cookies.clear(c.domain, c.path, c.name)
-
-    # retrieve exported contest csv
+    #
+    # # retrieve exported contest csv
     # s = requests.Session()
     # r = s.get(contest_csv_url, cookies=cookies)
 
@@ -318,12 +320,39 @@ def pull_contest_zip(filename, contest_id):
     logger.debug("type(result): {}".format(type(result)))
 
     if result is False:
-        exit("Broken from browsercookie method")
+        logger.debug("Broken from browsercookie method")
     else:
         logger.debug("browsercookie method worked!!")
         return result
 
-    # try browsercookie method
+    # use selenium to refresh cookies
+    use_selenium(contest_csv_url)
+
+    # try browsercookie method again
+    cookies = browsercookie.chrome()
+
+    for c in cookies:
+        if 'draft' not in c.domain:
+            logger.debug("Clearing {} {} {} ".format(c.domain, c.path, c.name))
+            cookies.clear(c.domain, c.path, c.name)
+        else:
+            if c.expires:
+                # chrome is ridiculous - this math is required
+                # Devide the actual timestamp (in my case it's expires_utc column in cookies table) by 1000000 // And someone should explain my why.
+                # Subtract 11644473600
+                # DONE! Now you got UNIX timestamp
+                new_expiry = c.expires / 1000000
+                new_expiry -= 11644473600
+                c.expires = new_expiry
+
+    result = setup_session(contest_csv_url, cookies)
+    logger.debug("type(result): {}".format(type(result)))
+
+    if result is False:
+        logger.debug("Broken from SECOND browsercookie method")
+    else:
+        logger.debug("SECOND browsercookie method worked!!")
+        return result
     #
 
     # trying load pickle cookie method
@@ -341,6 +370,33 @@ def pull_contest_zip(filename, contest_id):
     #             cookie = requests.cookies.create_cookie(
     #                 name=c['name'], value=c['value'], domain=c['domain'], path=c['path'], secure=c['secure'])
     #             s.cookies.set_cookie(cookie)
+
+
+def use_selenium(contest_csv_url):
+    logger.debug("Creating and adding options")
+    options = webdriver.ChromeOptions()
+    options.add_argument("--no-sandbox")
+    options.add_argument('--user-data-dir=/home/pi/.config/chromium')
+    options.add_argument('--profile-directory=Profile 1')
+    # options.headless = True
+    # print("Converting options to capabilities")
+    # options = options.to_capabilities()
+    logger.debug("Starting driver with options")
+    driver = webdriver.Chrome(executable_path='/usr/bin/chromedriver',
+                              desired_capabilities=options.to_capabilities())
+    # driver = webdriver.Remote(service.service_url, options)
+
+    logger.debug("Performing get on {}".format(contest_csv_url))
+    driver.get(contest_csv_url)
+    logger.debug(driver.current_url)
+    logger.debug("Letting DK load ...")
+    time.sleep(5)  # Let DK Load!
+    logger.debug(driver.current_url)
+    logger.debug("Letting DK load ...")
+    time.sleep(5)  # Let DK Load!
+    logger.debug(driver.current_url)
+    logger.debug("Quitting driver")
+    driver.quit()
 
 
 def add_header_format(service, spreadsheet_id, sheet_id):
@@ -622,7 +678,7 @@ def find_sheet_id(service, spreadsheet_id, title):
 def get_matchup_info(game_info, team_abbv):
     # wth is this?
     # logger.debug(game_info)
-    if game_info in ['In Progress', 'Final', 'Postponed', 'UNKNOWN', 'Suspended']:
+    if game_info in ['In Progress', 'Final', 'Postponed', 'UNKNOWN', 'Suspended', 'Delayed']:
         return game_info
 
     # split game info into matchup_info

@@ -15,5 +15,6 @@ python-dateutil = "*"
 pytz = "*"
 nba-api = "*"
 browsercookie = {path = "/home/pi/Downloads/richardpenman-browsercookie-aab350c45967"}
+selenium = "*"
 
 [dev-packages]

@@ -272,7 +272,6 @@ def get_contests_by_entries(contests, entry_fee, limit):
 
 
 def print_cron_string(contest, sport, start_dt):
-
     py_str = 'cd /home/pi/Desktop/dk_salary_owner/ && /usr/local/bin/pipenv run python'
     dl_str = py_str + ' download_DK_salary.py'
     get_str = py_str + ' get_DFS_results.py'
@@ -319,7 +318,7 @@ def print_cron_string(contest, sport, start_dt):
 
     print("{0} {1} {2} -s {3} -dg {4} >> /home/pi/Desktop/{3}_results.log 2>&1".format(
         dl_interval, cron_str, dl_str, sport, contest['dg']))
-    print("{0} {1} {2} -s {3} -i {4} >> /home/pi/Desktop/{3}_results.log 2>&1".format(
+    print("export DISPLAY=:0 && {0} {1} {2} -s {3} -i {4} >> /home/pi/Desktop/{3}_results.log 2>&1".format(
         get_interval, cron_str, get_str, sport, contest['id']))
 
 
