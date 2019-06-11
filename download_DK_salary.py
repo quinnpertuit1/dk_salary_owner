@@ -85,8 +85,7 @@ def main():
             print("contest_type_id [{}]: {}".format(
                 args.sport, contest_type_id[args.sport]))
         else:
-            print("Sport {} not in contest_type_id dictionary".format(args.sport))
-            exit()
+            raise("Sport {} not in contest_type_id dictionary".format(args.sport))
 
         csv_url = "https://www.draftkings.com/lineup/getavailableplayerscsv?contestTypeId={0}&draftGroupId={1}".format(
             contest_type_id[args.sport], args.draft_group)

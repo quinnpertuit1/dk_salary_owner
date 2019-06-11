@@ -1056,30 +1056,31 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
     # range 2 K15:N25 range 6: Q15:U25
     # range 3 K27:N37 range 7: Q27:U37
     # range 4 K39:O49 range 8: Q39:U49
-    ranges = [
-        "{}!K3:O15".format(sport),
-        "{}!K15:O25".format(sport),
-        "{}!K27:O37".format(sport),
-        "{}!K39:O49".format(sport),
-        "{}!Q3:U15".format(sport),
-        "{}!Q15:U25".format(sport),
-        "{}!Q27:U37".format(sport),
-        "{}!Q39:U49".format(sport)
-    ]
+    # ranges = [
+    #     "{}!K3:O15".format(sport),
+    #     "{}!K15:O25".format(sport),
+    #     "{}!K27:O37".format(sport),
+    #     "{}!K39:O49".format(sport),
+    #     "{}!Q3:U15".format(sport),
+    #     "{}!Q15:U25".format(sport),
+    #     "{}!Q27:U37".format(sport),
+    #     "{}!Q39:U49".format(sport)
+    # ]
     # NFL has an extra position, so it needs new ranges
-    NFL_ranges = [
-        "{}!K3:O15".format(sport),
-        "{}!K16:O27".format(sport),
-        "{}!K29:O40".format(sport),
-        "{}!K42:O53".format(sport),
-        "{}!Q3:U15".format(sport),
-        "{}!Q16:U27".format(sport),
-        "{}!Q29:U40".format(sport),
-        "{}!Q42:U53".format(sport)
-    ]
+    # NFL_ranges = [
+    #     "{}!K3:O15".format(sport),
+    #     "{}!K16:O27".format(sport),
+    #     "{}!K29:O40".format(sport),
+    #     "{}!K42:O53".format(sport),
+    #     "{}!Q3:U15".format(sport),
+    #     "{}!Q16:U27".format(sport),
+    #     "{}!Q29:U40".format(sport),
+    #     "{}!Q42:U53".format(sport)
+    # ]
 
     ultimate_list = []
     lineup_mod = 4
+    r = ''
     if sport == 'NBA':
         for i, (k, v) in enumerate(sorted(lineup.items())):
             # print("i: {} K: {}\nv:{}".format(i, k, v))
@@ -1094,8 +1095,6 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
             # append an empty list for spacing
             ultimate_list.append([])
         r = "{}!J3:V54".format(sport)
-        logger.debug("trying to write all lineups to [{}]".format(r))
-        write_row(service, spreadsheet_id, r, ultimate_list)
     elif 'PGA' in sport:
         # for i, (k, v) in enumerate(sorted(lineup.items())):
         #     # print("i: {} K: {}\nv:{}".format(i, k, v))
@@ -1112,8 +1111,6 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
         #     ultimate_list.append([])
         ultimate_list = build_lineup_list(lineup, sport)
         r = "{}!J3:V54".format(sport)
-        logger.debug("trying to write all lineups to [{}]".format(r))
-        write_row(service, spreadsheet_id, r, ultimate_list)
     elif sport == 'TEN':
         for i, (k, v) in enumerate(sorted(lineup.items())):
             # print("i: {} K: {}\nv:{}".format(i, k, v))
@@ -1128,29 +1125,28 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
             # append an empty list for spacing
             ultimate_list.append([])
         r = "{}!J3:V54".format(sport)
-        logger.debug("trying to write all lineups to [{}]".format(r))
-        write_row(service, spreadsheet_id, r, ultimate_list)
-    elif sport == 'NFL':
-        for i, (k, v) in enumerate(sorted(lineup.items())):
-            # print("i: {} K: {}\nv:{}".format(i, k, v))
-            values = write_NFL_lineup(v, k)
-            logger.debug("trying to write line [{}] to {}".format(k, NFL_ranges[i]))
-            # print(values)
-            write_row(service, spreadsheet_id, NFL_ranges[i], values)
-    elif sport == 'CFB':
-        for i, (k, v) in enumerate(sorted(lineup.items())):
-            # print("i: {} K: {}\nv:{}".format(i, k, v))
-            values = write_CFB_lineup(v, k)
-            logger.debug("trying to write line [{}] to {}".format(k, ranges[i]))
-            # print(values)
-            write_row(service, spreadsheet_id, ranges[i], values)
-    elif sport == 'NHL':
-        for i, (k, v) in enumerate(sorted(lineup.items())):
-            # print("i: {} K: {}\nv:{}".format(i, k, v))
-            values = write_NHL_lineup(v, k)
-            logger.debug("trying to write line [{}] to {}".format(k, NFL_ranges[i]))
-            # print(values)
-            write_row(service, spreadsheet_id, NFL_ranges[i], values)
+
+    # elif sport == 'NFL':
+    #     for i, (k, v) in enumerate(sorted(lineup.items())):
+    #         # print("i: {} K: {}\nv:{}".format(i, k, v))
+    #         values = write_NFL_lineup(v, k)
+    #         logger.debug("trying to write line [{}] to {}".format(k, NFL_ranges[i]))
+    #         # print(values)
+    #         write_row(service, spreadsheet_id, NFL_ranges[i], values)
+    # elif sport == 'CFB':
+    #     for i, (k, v) in enumerate(sorted(lineup.items())):
+    #         # print("i: {} K: {}\nv:{}".format(i, k, v))
+    #         values = write_CFB_lineup(v, k)
+    #         logger.debug("trying to write line [{}] to {}".format(k, ranges[i]))
+    #         # print(values)
+    #         write_row(service, spreadsheet_id, ranges[i], values)
+    # elif sport == 'NHL':
+    #     for i, (k, v) in enumerate(sorted(lineup.items())):
+    #         # print("i: {} K: {}\nv:{}".format(i, k, v))
+    #         values = write_NHL_lineup(v, k)
+    #         logger.debug("trying to write line [{}] to {}".format(k, NFL_ranges[i]))
+    #         # print(values)
+    #         write_row(service, spreadsheet_id, NFL_ranges[i], values)
     elif sport == 'MLB':
         for i, (k, v) in enumerate(sorted(lineup.items())):
             mlb_mod = 13
@@ -1164,8 +1160,9 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
             # append an empty list for spacing
             ultimate_list.append([])
         r = "{}!J3:V57".format(sport)
-        logger.debug("trying to write all lineups to [{}]".format(r))
-        write_row(service, spreadsheet_id, r, ultimate_list)
+
+    logger.debug("trying to write all lineups to [{}]".format(r))
+    write_row(service, spreadsheet_id, r, ultimate_list)
 
 
 def build_lineup_list(lineup, sport):
@@ -1214,25 +1211,6 @@ def read_salary_csv(fn):
             salary[name]['game_info'] = row[6]
             salary[name]['team_abbv'] = row[7]
         return salary
-
-
-# TODO remove since i use strip_accents at the top
-# def massage_name(name):
-#     """Manually remove accents from peoples' names."""
-#     # wtf is going on with these guys' names?
-#     if 'Exum' in name:
-#         name = 'Dante Exum'
-#     if 'Guillermo Hernan' in name:
-#         name = 'Guillermo Hernangomez'
-#     if 'Juancho Hernan' in name:
-#         name = 'Juancho Hernangomez'
-#     if 'lex Abrines' in name:
-#         name = 'Alex Abrines'
-#     if 'Luwawu-Cabarrot' in name:
-#         name = 'Timothe Luwawu-Cabarrot'
-#     if ' Calder' in name:
-#         name = 'Jose Calderon'
-#     return name
 
 
 def main():
