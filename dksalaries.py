@@ -284,17 +284,17 @@ def print_cron_string(contest, sport, start_dt):
         dl_interval = "*/10"
         get_interval = "*/5"
     elif sport == 'MLB':
-        sport_length = 6
+        sport_length = 7
         dl_interval = '1-59/15'
-        get_interval = '1-59/10'
+        get_interval = '2-59/10'
     elif sport == 'PGA':
         sport_length = 8
         dl_interval = '3-59/30'
-        get_interval = '3-59/15'
+        get_interval = '4-59/15'
     elif sport == 'TEN':
         sport_length = 15
         dl_interval = '4-59/15'
-        get_interval = '4-59/10'
+        get_interval = '5-59/10'
 
     # add about how long the slate should be
     end_dt = start_dt + datetime.timedelta(hours=sport_length)
@@ -318,7 +318,7 @@ def print_cron_string(contest, sport, start_dt):
 
     print("{0} {1} {2} -s {3} -dg {4} >> /home/pi/Desktop/{3}_results.log 2>&1".format(
         dl_interval, cron_str, dl_str, sport, contest['dg']))
-    print("export DISPLAY=:0 && {0} {1} {2} -s {3} -i {4} >> /home/pi/Desktop/{3}_results.log 2>&1".format(
+    print("{0} {1} export DISPLAY=:0 && {2} -s {3} -i {4} >> /home/pi/Desktop/{3}_results.log 2>&1".format(
         get_interval, cron_str, get_str, sport, contest['id']))
 
 
