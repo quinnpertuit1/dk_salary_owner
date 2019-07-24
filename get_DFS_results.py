@@ -599,7 +599,7 @@ def add_cond_format_rules(service, spreadsheet_id, sheet_id):
 
 def add_last_updated(service, spreadsheet_id, title):
     """Add (or update) the time in the header."""
-    range = "{}!J1:L1".format(title)
+    range = "{}!M1:Q1".format(title)
     now = datetime.datetime.now(tz=EST5EDT())
     values = [
         ['Last Updated', '', now.strftime('%Y-%m-%d %H:%M:%S')]
@@ -1110,7 +1110,7 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
         #     # append an empty list for spacing
         #     ultimate_list.append([])
         ultimate_list = build_lineup_list(lineup, sport)
-        r = "{}!J3:V54".format(sport)
+        r = "{}!M3:Y54".format(sport)
     elif sport == 'TEN':
         for i, (k, v) in enumerate(sorted(lineup.items())):
             # print("i: {} K: {}\nv:{}".format(i, k, v))
@@ -1319,7 +1319,11 @@ def main():
             }
             # logger.debug("player_dict[{}]['matchup_info']: {}".format(
             #     name, player_dict[name]['matchup_info']))
-            values.append([pos, name, team_abbv, matchup_info, salary, perc, pts, value])
+            if 'PGA' not in sport:
+                values.append([pos, name, team_abbv, matchup_info,
+                               salary, perc, pts, value])
+            else:
+                values.append([pos, name, salary, perc, pts])
 
     # logger.debug("player_dict:")
     # logger.debug(player_dict)
@@ -1347,8 +1351,8 @@ def main():
     if parsed_lineup:
         logger.info('Writing lineup')
         write_lineup(service, spreadsheet_id, sheet_id, parsed_lineup, args.sport)
-    add_col_num_fmt(service, spreadsheet_id, sheet_id)
-    add_header_format(service, spreadsheet_id, sheet_id)
+    # add_col_num_fmt(service, spreadsheet_id, sheet_id)
+    # add_header_format(service, spreadsheet_id, sheet_id)
     # add_cond_format_rules(service, spreadsheet_id, sheet_id)
     add_last_updated(service, spreadsheet_id, args.sport)
     # update_sheet_title(service, spreadsheet_id, sheet_id, args.sport)
