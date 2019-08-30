@@ -3,18 +3,31 @@ url = "https://pypi.org/simple"
 verify_ssl = true
 name = "pypi"
 
+[[source]]
+url = "https://www.piwheels.org/simple"
+name = "piwheels"
+verify_ssl = true
+
 [packages]
 requests = "*"
 google-api-python-client = "*"
 "oauth2client" = "*"
 gspread = "*"
-"autopep8" = "*"
 "bs4" = "*"
 "html5lib" = "*"
 python-dateutil = "*"
 pytz = "*"
-nba-api = "*"
-browsercookie = {path = "/home/pi/Downloads/richardpenman-browsercookie-aab350c45967"}
+# nba-api = "*"
+# browsercookie = {path = "/home/pi/Downloads/richardpenman-browsercookie-aab350c45967"}
 selenium = "*"
+lz4 = "*"
 
 [dev-packages]
+black = "*"
+pylint = "*"
+
+[requires]
+python_version = "3.7"
+
+[pipenv]
+allow_prereleases = true

@@ -331,7 +331,7 @@ def pull_contest_zip(filename, contest_id):
 
     for c in cookies:
         if "draft" not in c.domain:
-            logger.debug("Clearing {} {} {} ".format(c.domain, c.path, c.name))
+            # logger.debug("Clearing {} {} {} ".format(c.domain, c.path, c.name))
             cookies.clear(c.domain, c.path, c.name)
         else:
             if c.expires:
@@ -1209,7 +1209,7 @@ def write_lineup(service, spreadsheet_id, sheet_id, lineup, sport):
         #     # append an empty list for spacing
         #     ultimate_list.append([])
         ultimate_list = build_lineup_list(lineup, sport)
-        r = "{}!L3:X54".format(sport)
+        r = "{}!L8:X54".format(sport)
     elif sport == "TEN":
         for i, (k, v) in enumerate(sorted(lineup.items())):
             # print("i: {} K: {}\nv:{}".format(i, k, v))

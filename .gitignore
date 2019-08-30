@@ -1,5 +1,8 @@
 __pycache__/
 .venv/
+.vscode/
+
+Pipfile.lock
 
 credentials.json
 token.json
@@ -12,4 +15,4 @@ DKSalaries_*_*.csv
 output.csv
 
 # txt
-out.txt
+*.txt

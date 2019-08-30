@@ -49,6 +49,40 @@ import browsercookie
 CSVPATH = 'nba/data/salaries'
 
 
+class Contest(object):
+    def __init__(self, contest):
+        self.contest = contest
+        self.date_time = contest['sd']
+        self.start_dt = get_dt_from_timestamp(self.date_time)
+        self.name = contest['n']
+        self.id = contest['id']
+        self.dg = contest['dg']
+        self.sd = contest['sd']
+        self.total_prizes = contest['po']
+        self.entries = contest['m']
+        self.entry_fee = contest['a']
+        self.entry_count = contest['ec']
+        self.mec = contest['mec']
+
+    def __str__(self):
+        print("-------within--------")
+        print(self.contest)
+        print("---------------")
+        print("name: {}".format(self.name))
+        print("date_time: {}".format(self.date_time))
+        print("start_dt: {}".format(self.start_dt))
+        print("contest id: {}".format(self.id))
+        print("draft group: {}".format(self.dg))
+        print("sd: {}".format(self.sd))
+        print("total prizes: {}".format(self.total_prizes))
+        print("entries: {}".format(self.entries))
+        print("entry fee: {}".format(self.entry_fee))
+        print("entry count: {}".format(self.entry_count))
+        print("mec: {}".format(self.mec))
+        print("")
+        return ""
+
+
 def find_new_contests():
     """Maybe this belongs in another module."""
     def get_pst_from_timestamp(timestamp_str):
@@ -229,7 +263,7 @@ def get_dt_from_timestamp(timestamp_str):
     return datetime.datetime.fromtimestamp(timestamp / 1000)
 
 
-def get_largest_contest(contests, entry_fee=25, query=None, exclude=None, dt=datetime.datetime.today()):
+def get_largest_contest(contests, dt, entry_fee=25, query=None, exclude=None):
     print("get_largest_contest(contests, {})".format(entry_fee))
     print(type(contests))
     print("contests size: {}".format(len(contests)))
@@ -254,11 +288,14 @@ def get_largest_contest(contests, entry_fee=25, query=None, exclude=None, dt=dat
                     else:
                         ls.append(c)
 
+    print("number of contests meeting requirements: {}".format(len(ls)))
     # sort contests by # of entries
     sorted_list = sorted(ls, key=lambda x: x['m'], reverse=True)
+    print("sorted_list size: {}".format(len(sorted_list)))
 
     # if there is a sorted list, return the first element
     if sorted_list:
+        print("sorted_list: {}".format(sorted_list[0]))
         return sorted_list[0]
 
     return None
@@ -272,6 +309,7 @@ def get_contests_by_entries(contests, entry_fee, limit):
 
 
 def print_cron_string(contest, sport, start_dt):
+    print(contest)
     py_str = 'cd /home/pi/Desktop/dk_salary_owner/ && /usr/local/bin/pipenv run python'
     dl_str = py_str + ' download_DK_salary.py'
     get_str = py_str + ' get_DFS_results.py'
@@ -317,9 +355,17 @@ def print_cron_string(contest, sport, start_dt):
     cron_str = "{0} {1} {2} *".format(hours, days, end_dt.strftime('%m'))
 
     print("{0} {1} {2} -s {3} -dg {4} >> /home/pi/Desktop/{3}_results.log 2>&1".format(
-        dl_interval, cron_str, dl_str, sport, contest['dg']))
+        dl_interval, cron_str, dl_str, sport, contest.dg))
     print("{0} {1} export DISPLAY=:0 && {2} -s {3} -i {4} >> /home/pi/Desktop/{3}_results.log 2>&1".format(
-        get_interval, cron_str, get_str, sport, contest['id']))
+        get_interval, cron_str, get_str, sport, contest.id))
+
+
+def valid_date(s):
+    try:
+        return datetime.datetime.strptime(s, "%Y-%m-%d")
+    except ValueError:
+        msg = "Not a valid date: '{0}'.".format(s)
+        raise argparse.ArgumentTypeError(msg)
 
 
 def main():
@@ -337,12 +383,13 @@ def main():
         '-q', '--query', help='Search contest name')
     parser.add_argument(
         '-x', '--exclude', help='Exclude from search')
+    parser.add_argument(
+        '-d', '--date', help='The Start Date - format YYYY-MM-DD', default=datetime.datetime.today(), type=valid_date)
     args = parser.parse_args()
 
     live = ''
     print(args)
     if args.live:
-        print("args.live is true")
         live = 'live'
 
     # set cookies based on Chrome session
@@ -383,40 +430,34 @@ def main():
     #     get_largest_contest(response_contests, 27)
     # ] + get_contests_by_entries(response_contests, 3, 50000)
 
-    contests = [
+    # contests = [
         # get_largest_contest(response_contests, 3, query),
         # get_largest_contest(response_contests, 4, query),
-        get_largest_contest(response_contests, args.entry, args.query, args.exclude)
-    ]
+        #
+    # ]
 
-    for contest in contests:
-        print("---------------")
-        print(contest)
-        print("---------------")
-        date_time = get_pst_from_timestamp(contest['sd'])
-        start_dt = get_dt_from_timestamp(contest['sd'])
-        print("name: {}".format(contest['n']))
-        print("date_time: {}".format(date_time))
-        print("start_dt: {}".format(start_dt))
-        print("contest id: {}".format(contest['id']))
-        print("draft group: {}".format(contest['dg']))
-        print("date: {}".format(date_time.date()))
-        print("sd: {}".format(contest['sd']))
-        print("total prizes: {}".format(contest['po']))
-        print("entries: {}".format(contest['m']))
-        print("entry fee: {}".format(contest['a']))
-        print("entry count: {}".format(contest['ec']))
-        print("mec: {}".format(contest['mec']))
-        print("")
+    # TODO add switch to categorize types/dates of contests returned
+    # for example
+    # contests size: 562
+    # dates: 2018-07-13: 500
+    #        2018-07-14:  62
 
-        # change GOLF back to PGA
-        if args.sport == 'GOLF':
-            args.sport = 'PGA'
+    contest = get_largest_contest(
+        response_contests, args.date, args.entry, args.query, args.exclude)
+    print("contest size: {}".format(len(contest)))
+    print("contest type: {}".format(type(contest)))
+    # for contest in contests:
 
-        # start_hour = start_dt.strftime('%H')
-        print("start: {}".format(start_dt))
+    c = Contest(contest)
 
-        print_cron_string(contest, args.sport, start_dt)
+    # change GOLF back to PGA
+    if args.sport == 'GOLF':
+        args.sport = 'PGA'
+
+    # start_hour = start_dt.strftime('%H')
+    print("start: {}".format(c.start_dt))
+
+    print_cron_string(c, args.sport, c.start_dt)
 
 
 if __name__ == '__main__':
